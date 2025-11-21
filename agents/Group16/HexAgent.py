@@ -45,4 +45,6 @@ class HexAgent(AgentBase):
             return Move(-1, -1)
         else:
             x, y = choice(self._choices)
+            while board._tiles[x][y]._colour != None:
+                x, y = choice(self._choices)
             return Move(x, y)
