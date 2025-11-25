@@ -120,15 +120,21 @@ class Board:
     def print_board(self) -> str:
         """Returns the string representation of a board."""
 
+        ANSI_COLOURS = {
+            "R": "\033[31m",
+            "B": "\033[34m",
+            "0": "\033[0m",
+        }
+
         output = ""
         leading_spaces = ""
         for line in self._tiles:
             output += leading_spaces
             leading_spaces += " "
             for tile in line:
-                output += Colour.get_char(tile.colour) + " "
+                char = Colour.get_char(tile.colour)
+                output += f"{ANSI_COLOURS[char]}{char}{ANSI_COLOURS['0']} "
             output += "\n"
-
         return output
 
     def get_winner(self) -> Colour:
