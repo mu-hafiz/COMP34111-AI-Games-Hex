@@ -233,3 +233,11 @@ class HexAgent(AgentBase):
             max_time_seconds=2,  # time limit per move
         )
         return chosen_move
+
+
+# To run the agent:
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16"
+
+# To start docker container (Windows):
+# docker run --cpus=8 --memory=8G -v "${PWD}:/home/hex" --name hex --rm -it hex bash
