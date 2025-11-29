@@ -28,8 +28,9 @@ def clone_board(board: Board) -> Board:
 
 def apply_move(board: Board, move: Move, colour: Colour) -> None:
     """Set the chosen tile to the given colour."""
-    x, y = move.x, move.y 
+    x, y = move.x, move.y
     board.set_tile_colour(x, y, colour)
+
 
 class MCTSNode:
     """
@@ -68,10 +69,7 @@ class MCTSNode:
     def _has_someone_won(self) -> bool:
         # This board is BEFORE player_to_move moves,
         # so the previous mover could have won.
-        return (
-            self.board.has_ended(Colour.RED)
-            or self.board.has_ended(Colour.BLUE)
-        )
+        return self.board.has_ended(Colour.RED) or self.board.has_ended(Colour.BLUE)
 
     def is_terminal(self) -> bool:
         return self._has_someone_won()
@@ -117,6 +115,7 @@ class MCTSNode:
         """
         self.visits += 1
         self.value += reward
+
 
 def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
     """
@@ -168,7 +167,10 @@ def mcts_search(
     it = 0
 
     while True:
-        if max_time_seconds is not None and (time.perf_counter() - start_time) > max_time_seconds:
+        if (
+            max_time_seconds is not None
+            and (time.perf_counter() - start_time) > max_time_seconds
+        ):
             break
         if it >= max_iterations:
             break
@@ -205,7 +207,8 @@ def mcts_search(
 
 # To run the agent:
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" 
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16"
+
 
 class HexAgent(AgentBase):
     _board_size: int = 11
@@ -226,7 +229,7 @@ class HexAgent(AgentBase):
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=5000,     # max number of random plays
-            max_time_seconds=2    # time limit per move
+            max_iterations=5000,  # max number of random plays
+            max_time_seconds=2,  # time limit per move
         )
         return chosen_move
