@@ -7,6 +7,131 @@ from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
 
+
+class DSU:
+    def __init__(self, n: int):
+        self.parent = list(range(n))
+        self.rank = [0] * n
+
+    def find(self, a: int) -> int:
+        while self.parent[a] != a:
+            self.parent[a] = self.parent[self.parent[a]]
+            a = self.parent[a]
+        return a
+
+    def union(self, a: int, b: int) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return
+        if self.rank[ra] < self.rank[rb]:
+            self.parent[ra] = rb
+        elif self.rank[ra] > self.rank[rb]:
+            self.parent[rb] = ra
+        else:
+            self.parent[rb] = ra
+            self.rank[ra] += 1
+
+
+def build_dsu_for_colour(board: Board, colour: Colour) -> DSU:
+    N = board.size
+    total_nodes = N * N + 4  # tile nodes + 4 virtual nodes
+    dsu = DSU(total_nodes)
+
+    red_top = N * N
+    red_bottom = N * N + 1
+    blue_left = N * N + 2
+    blue_right = N * N + 3
+
+    def tile_id(x, y):
+        return x * N + y
+
+    # Connect stones + neighbours
+    for x in range(N):
+        for y in range(N):
+            if board.tiles[x][y].colour == colour:
+                tid = tile_id(x, y)
+
+                # union neighbours of same colour
+                for nx, ny in hex_neighbors(board, x, y):
+                    if board.tiles[nx][ny].colour == colour:
+                        dsu.union(tid, tile_id(nx, ny))
+
+                # union to the sides depending on colour
+                if colour == Colour.RED:
+                    if y == 0:
+                        dsu.union(tid, red_top)
+                    if y == N - 1:
+                        dsu.union(tid, red_bottom)
+                else:
+                    if x == 0:
+                        dsu.union(tid, blue_left)
+                    if x == N - 1:
+                        dsu.union(tid, blue_right)
+
+    return dsu
+
+
+def dsu_connectivity_score(board: Board, move: Move, colour: Colour) -> float:
+    temp = clone_board(board)
+    apply_move(temp, move, colour)
+
+    N = temp.size
+    dsu = build_dsu_for_colour(temp, colour)
+
+    # virtual nodes
+    red_top = N * N
+    red_bottom = N * N + 1
+    blue_left = N * N + 2
+    blue_right = N * N + 3
+
+    if colour == Colour.RED:
+        r1 = dsu.find(red_top)
+        r2 = dsu.find(red_bottom)
+    else:
+        r1 = dsu.find(blue_left)
+        r2 = dsu.find(blue_right)
+
+    # Winning move
+    if r1 == r2:
+        return 1000.0
+
+    size1 = 0
+    size2 = 0
+
+    for x in range(N):
+        for y in range(N):
+            if temp.tiles[x][y].colour == colour:
+                root = dsu.find(x * N + y)
+                if root == r1:
+                    size1 += 1
+                if root == r2:
+                    size2 += 1
+
+    return min(size1, size2)
+
+
+def hex_neighbors(board: Board, x: int, y: int) -> list[tuple[int, int]]:
+    directions = [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, -1),
+        (-1, 1),
+    ]
+    res = []
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < board.size and 0 <= ny < board.size:
+            res.append((nx, ny))
+    return res
+
+
+def total_heuristic(board: Board, move: Move, colour: Colour) -> float:
+    dsu_conn = dsu_connectivity_score(board, move, colour)
+    return dsu_conn
+
+
 def get_legal_moves(board: Board) -> list[Move]:
     """Get a list of all the empty tiles on the board."""
     moves: list[Move] = []
@@ -74,19 +199,22 @@ class MCTSNode:
     def is_terminal(self) -> bool:
         return self._has_someone_won()
 
-
     def ucb1(self, child: "MCTSNode", exploration: float = 1.4) -> float:
         """UCB1 formula for balancing exploration vs exploitation."""
         if child.visits == 0:
             return float("inf")  # always explore unvisited child first
+
         exploit = child.value / child.visits
         explore = exploration * math.sqrt(math.log(self.visits) / child.visits)
-        return exploit + explore
+
+        h = total_heuristic(self.board, child.move, self.player_to_move)
+        bias = 0.05 * h / (1 + child.visits)
+
+        return exploit + explore + bias
 
     def select_child(self, exploration: float = 1.4) -> "MCTSNode":
         """Pick child with highest UCB1 score."""
         return max(self.children, key=lambda c: self.ucb1(c, exploration))
-
 
     def add_child(self, move: Move) -> "MCTSNode":
         """
@@ -106,7 +234,6 @@ class MCTSNode:
         self.children.append(child)
         self.untried_moves.remove(move)
         return child
-
 
     def update(self, reward: float) -> None:
         """
@@ -131,10 +258,20 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
             # Shouldn't happen in real Hex, but safe:
             return 0.0
 
-        move = random.choice(legal_moves)
+        # ε-greedy rollout policy biased by connection_score
+        epsilon = 0.1
+        if random.random() < epsilon:
+            move = random.choice(legal_moves)
+        else:
+            scores = [total_heuristic(board, m, current_player) for m in legal_moves]
+            temperature = 1.5
+            exp_scores = [math.exp(s / temperature) for s in scores]
+            total = sum(exp_scores)
+            probs = [v / total for v in exp_scores]
+            move = random.choices(legal_moves, probs)[0]
+
         apply_move(board, move, current_player)
 
-        # Only the player who just moved can have just won
         if board.has_ended(current_player):
             if current_player == my_colour:
                 return 1.0
@@ -172,8 +309,8 @@ def mcts_search(
             and (time.perf_counter() - start_time) > max_time_seconds
         ):
             break
-        if it >= max_iterations:
-            break
+        # if it >= max_iterations:
+        #     break
         it += 1
 
         node = root
@@ -184,7 +321,15 @@ def mcts_search(
 
         # 2) EXPANSION: if non-terminal and has untried moves, expand one
         if not node.is_terminal() and node.untried_moves:
-            move = random.choice(node.untried_moves)
+            scores = [
+                total_heuristic(node.board, m, node.player_to_move)
+                for m in node.untried_moves
+            ]
+            exp_scores = [math.exp(s / 3.0) for s in scores]
+            total = sum(exp_scores)
+            probs = [v / total for v in exp_scores]
+
+            move = random.choices(node.untried_moves, probs)[0]
             node = node.add_child(move)
 
         # 3) SIMULATION: random playout from this node
@@ -203,11 +348,6 @@ def mcts_search(
 
     best_child = max(root.children, key=lambda c: c.visits)
     return best_child.move
-
-
-# To run the agent:
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16"
 
 
 class HexAgent(AgentBase):
