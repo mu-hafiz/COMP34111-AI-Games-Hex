@@ -31,6 +31,56 @@ def apply_move(board: Board, move: Move, colour: Colour) -> None:
     x, y = move.x, move.y 
     board.set_tile_colour(x, y, colour)
 
+def make_fair_first_move(board: Board) -> Move:
+    """
+    Choose a fair first move to combat the swap rule.
+    Returns a Move object.
+    """
+    size = board.size
+
+    base_candidates = [(1, 2), (1, 7), (2, 5), (8, 5), (9, 2), (9, 7)]
+
+    # Add edge candidates avoiding corners
+    candidates = base_candidates.copy()
+    for x in range(size):
+        if x >= 2:                 # left edge
+            candidates.append((x, 0))
+        if x <= size - 3:          # right edge
+            candidates.append((x, size - 1))
+
+    x, y = random.choice(candidates)
+    return Move(x, y)
+
+def is_central(move: Move, size: int) -> bool:
+    """
+    Check if a move is in the central area of the board.
+    """
+    central_corners = [(2, 0), (8, size-1), (2, 0), (8, size-1)]
+
+    if (2 <= move.x <= size-3):
+        for x, y in central_corners:
+            if (move.x, move.y) == (x, y):
+                return False
+        return True
+    
+    return False
+
+def should_swap(board: Board, opp_move: Move) -> bool:
+    """
+    Decide whether to swap based on opponent's first move.
+    If opponent plays in central area or obtuse corners, swap.
+    """
+    size = board.size
+    obtuse_corners = [(0, size-1), (1, size-2), (1, size-1), (9, 0), (9, 1), (10, 0)]
+
+    if is_central(opp_move, size):
+        return True
+
+    for x, y in obtuse_corners:
+        if (opp_move.x, opp_move.y) == (x, y):
+            return True
+
+    return False
 class MCTSNode:
     """
     A node in the MCTS tree.
@@ -215,13 +265,18 @@ class HexAgent(AgentBase):
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """
-        Swap on turn 2 otherwise use MCTS to select the move
+        Decide on a move to make given the current turn, board state, and opponent's last move.
+        Turn 1: Make a fair move to combat the swap rule.
+        Turn 2: Decide whether to swap based on opponent's first move.
+        Subsequent turns: Use MCTS to select the best move.
         """
 
-        # Always swap on turn 2
-        # TODO: add some smarter swap logic
+        if turn == 1:
+            return make_fair_first_move(board)
+
         if turn == 2:
-            return Move(-1, -1)
+            if should_swap(board, opp_move):
+                return Move(-1, -1)
 
         chosen_move = mcts_search(
             root_board=board,
