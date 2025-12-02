@@ -31,25 +31,23 @@ def apply_move(board: Board, move: Move, colour: Colour) -> None:
     x, y = move.x, move.y 
     board.set_tile_colour(x, y, colour)
 
-def make_fair_first_move(board: Board) -> Move:
+def get_fair_first_moves(board: Board) -> set[tuple[int, int]]:
     """
     Choose a fair first move to combat the swap rule.
-    Returns a Move object.
+    Returns a list of Move objects.
     """
     size = board.size
 
-    base_candidates = [(1, 2), (1, 7), (2, 5), (8, 5), (9, 2), (9, 7)]
+    base_candidates = {(1, 2), (1, 7), (2, 5), (8, 5), (9, 2), (9, 7)}
 
     # Add edge candidates avoiding corners
     candidates = base_candidates.copy()
     for x in range(size):
         if x >= 2:                 # left edge
-            candidates.append((x, 0))
+            candidates.add((x, 0))
         if x <= size - 3:          # right edge
-            candidates.append((x, size - 1))
-
-    x, y = random.choice(candidates)
-    return Move(x, y)
+            candidates.add((x, size - 1))
+    return candidates
 
 def is_central(move: Move, size: int) -> bool:
     """
@@ -200,12 +198,18 @@ def mcts_search(
     my_colour: Colour,
     max_iterations: int = 1000,
     max_time_seconds: float | None = 2,
+    root_allowed_moves: list[Move] | None = None,
+    report_top_k: int | None = None,             # how many top entries to report (None=off)
+    exploration: float = 1.4,                    # exploration constant 
 ) -> Move:
     """
     Run MCTS from root_board for my_colour and return the chosen Move.
 
     max_iterations  : hard cap on how many simulations we run
     max_time_seconds: soft time budget per move (to stay within 5 min total)
+    report_top_k    : if set, print top-k children by visits and by UCB1 at end of search
+    report_verbose  : whether to print textual output (useful to toggle)
+    exploration     : exploration constant used in UCB1 selection and reporting
     """
     root = MCTSNode(
         board=clone_board(root_board),
@@ -213,6 +217,14 @@ def mcts_search(
         parent=None,
         move=None,
     )
+
+     # If a restricted candidate list is provided, limit/expand the root to only those moves.
+    if root_allowed_moves is not None:
+        # keep only allowed moves in root.untried_moves
+        root.untried_moves = [m for m in root.untried_moves if (m.x, m.y) in root_allowed_moves]
+        # pre-expand each allowed move as a child so the search distributes sims among them
+        for move in list(root.untried_moves):
+            root.add_child(move)
 
     start_time = time.perf_counter()
     it = 0
@@ -228,7 +240,7 @@ def mcts_search(
 
         # 1) SELECTION: move down while node is fully expanded and not terminal
         while node.is_fully_expanded() and node.children and not node.is_terminal():
-            node = node.select_child()
+            node = node.select_child(exploration)   # use passed exploration constant
 
         # 2) EXPANSION: if non-terminal and has untried moves, expand one
         if not node.is_terminal() and node.untried_moves:
@@ -248,6 +260,25 @@ def mcts_search(
         # No children (e.g. board full / very tiny time budget) – just play random legal move
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
+
+    # Optionally prepare and print top-k rankings
+    if report_top_k is not None and report_top_k > 0 and root.children:
+        # compute stats for each child
+        def child_stats(child: MCTSNode):
+            visits = child.visits
+            winrate = (child.value / visits) if visits > 0 else 0.0
+            ucb = root.ucb1(child, exploration)
+            mv = child.move
+            return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb}
+
+        children = list(root.children)
+        by_visits = sorted(children, key=lambda c: c.visits, reverse=True)[:report_top_k]
+
+        print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
+        print("Top by visits:")
+        for c in by_visits:
+            s = child_stats(c)
+            print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f}")
 
     best_child = max(root.children, key=lambda c: c.visits)
     return best_child.move
@@ -271,9 +302,6 @@ class HexAgent(AgentBase):
         Subsequent turns: Use MCTS to select the best move.
         """
 
-        if turn == 1:
-            return make_fair_first_move(board)
-
         if turn == 2:
             if should_swap(board, opp_move):
                 return Move(-1, -1)
@@ -281,7 +309,9 @@ class HexAgent(AgentBase):
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=5000,     # max number of random plays
-            max_time_seconds=2    # time limit per move
+            max_iterations=5000,          # max number of random plays
+            max_time_seconds=2,           # time limit per move
+            report_top_k=5,               # show top-5 for normal turns
+            root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
         )
         return chosen_move
