@@ -291,7 +291,7 @@ def mcts_search(
 # im not changing it incase this is on purpose
 
 # To play it against itself
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player2"
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
 
 class HexAgent(AgentBase):
     _board_size: int = 11
