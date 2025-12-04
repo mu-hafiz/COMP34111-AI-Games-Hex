@@ -1,7 +1,9 @@
 import random
 import math
 import time
+import multiprocessing
 
+from multiprocessing import Pool
 from src.AgentBase import AgentBase
 from src.Board import Board
 from src.Colour import Colour
@@ -118,6 +120,12 @@ class MCTSNode:
         self.visits += 1
         self.value += reward
 
+"""
+Non serialisable version of MCTS
+The issue is that the function takes parameter "node" (obj), which is too heavy
+We must create a serialisable function
+"""
+
 def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
     """
     From this node's position, play random moves until someone wins.
@@ -144,6 +152,54 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
 
         current_player = Colour.opposite(current_player)
 
+def play_from_node_S(board_state: Board, player_to_move: Colour, my_colour: Colour) -> float:
+    """
+    From this node's position, play random moves until someone wins.
+    Return +1 if my_colour wins or -1 if my_colour loses or 0 for draw (shouldn't happen in Hex).
+    Taken from Sasha's version and made serialisable by expanding the MCTSNode object into python types
+    """
+    board = clone_board(board_state)
+    current_player = player_to_move
+
+    while True:
+        legal_moves = get_legal_moves(board)
+        if not legal_moves:
+            # Shouldn't happen in real Hex, but safe:
+            return 0.0
+
+        move = random.choice(legal_moves)
+        apply_move(board, move, current_player)
+
+        # Only the player who just moved can have just won
+        if board.has_ended(current_player):
+            if current_player == my_colour:
+                return 1.0
+            else:
+                return -1.0
+
+        current_player = Colour.opposite(current_player)
+
+
+"""
+Functional version of parallelisation such that we can adapt it modularly
+If you believe in YAGNI you can just delete this
+
+def parallelised_rollouts(child_board: Board, child_player: Colour, my_col: Colour, workers):
+
+    # Give each worker a lighter copy of the gamestate to run simulations on
+
+
+    rollouts = [(child_board,child_player,my_col)]*workers
+
+    with Pool(processes = workers) as pool:
+        rewards = [pool.apply_async(play_from_node_S, copy) for copy in rollouts]
+        rewards = [r.get() for r in rewards]
+
+    # unpickle rewards
+    return rewards  
+
+"""
+
 
 def mcts_search(
     root_board: Board,
@@ -167,49 +223,78 @@ def mcts_search(
     start_time = time.perf_counter()
     it = 0
 
-    while True:
-        if max_time_seconds is not None and (time.perf_counter() - start_time) > max_time_seconds:
-            break
-        if it >= max_iterations:
-            break
-        it += 1
+    workers = 16 # adjust this for ur pc (run nproc in terminal or tinker urself)
 
-        node = root
 
-        # 1) SELECTION: move down while node is fully expanded and not terminal
-        while node.is_fully_expanded() and node.children and not node.is_terminal():
-            node = node.select_child()
+    with Pool(processes=workers) as pool:
+        while True:
+            if max_time_seconds is not None and (time.perf_counter() - start_time) > max_time_seconds:
+                break
+            if it >= max_iterations:
+                break
 
-        # 2) EXPANSION: if non-terminal and has untried moves, expand one
-        if not node.is_terminal() and node.untried_moves:
-            move = random.choice(node.untried_moves)
-            node = node.add_child(move)
+            node = root
 
-        # 3) SIMULATION: random playout from this node
-        reward = play_from_node(node, my_colour=my_colour)
+            # 1) SELECTION: move down while node is fully expanded and not terminal
+            while node.is_fully_expanded() and node.children and not node.is_terminal():
+                node = node.select_child()
 
-        # 4) BACKPROPAGATION: update nodes along path back to root
-        while node is not None:
-            node.update(reward)
-            node = node.parent
+            # 2) EXPANSION: if non-terminal and has untried moves, expand one
+            if not node.is_terminal() and node.untried_moves:
+                move = random.choice(node.untried_moves)
+                node = node.add_child(move)
 
+                child = node # Checkpoint for rewarding rollouts
+            # 3) SIMULATION: random playout from this node
+
+            """
+            not serialisable
+            reward = play_from_node(node, my_colour=my_colour)
+            """
+            
+            """
+            serialisable
+            """
+            # reward = play_from_node_S(node.board,node.player_to_move, my_colour) (this is the serial integration of parallelisation i.e. workers = 1)
+            rollouts = [(child.board,child.player_to_move,my_colour)]*workers
+            rewards = [pool.apply_async(play_from_node_S, args=args) for args in rollouts]
+            rewards = [r.get() for r in rewards]
+
+
+            it += len(rewards)
+            # 4) BACKPROPAGATION: update nodes along path back to root
+            for reward in rewards:
+                node = child
+                while node is not None:
+                    node.update(reward)
+                    node = node.parent
+
+    
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
 
+    print("{} iterations ran".format(it))
     best_child = max(root.children, key=lambda c: c.visits)
     return best_child.move
 
 
 # To run the agent:
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" 
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16"
+
+# to be clear, these two commands change the names of which agent is the MCTS agent and which one is the random agent
+# in particular, MCTS is called "G16" for 1st cmd
+# and MCTS is called "TestAgent" for 2nd cmd 
+# im not changing it incase this is on purpose
+
+# To play it against itself
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player2"
 
 class HexAgent(AgentBase):
     _board_size: int = 11
-
     def __init__(self, colour: Colour):
         super().__init__(colour)
 
@@ -220,13 +305,14 @@ class HexAgent(AgentBase):
 
         # Always swap on turn 2
         # TODO: add some smarter swap logic
-        if turn == 2:
+        # i turned this off so i didnt have to deal with the bug of the player's labels being wrong all the time
+        if turn == -1:
             return Move(-1, -1)
 
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=5000,     # max number of random plays
+            max_iterations=1000,     # max number of random plays
             max_time_seconds=2    # time limit per move
         )
         return chosen_move
