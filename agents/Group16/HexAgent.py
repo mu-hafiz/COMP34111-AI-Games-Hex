@@ -81,15 +81,19 @@ class MCTSNode:
 
     def ucb1(self, child: "MCTSNode", exploration: float = 1.4) -> float:
         """UCB1 formula for balancing exploration vs exploitation."""
+        # print("I've been visited {} times".format(self.visits))
         if child.visits == 0:
             return float("inf")  # always explore unvisited child first
         exploit = child.value / child.visits
         explore = exploration * math.sqrt(math.log(self.visits) / child.visits)
         return exploit + explore
 
-    def select_child(self, exploration: float = 1.4) -> "MCTSNode":
+    def select_child(self, col: Colour , exploration: float = 1.4) -> "MCTSNode":
         """Pick child with highest UCB1 score."""
-        return max(self.children, key=lambda c: self.ucb1(c, exploration))
+        if col == self.player_to_move:
+            return max(self.children, key=lambda c: self.ucb1(c, exploration))
+        else:
+            return min(self.children, key=lambda c: self.ucb1(c, exploration))
 
 
     def add_child(self, move: Move) -> "MCTSNode":
@@ -112,13 +116,18 @@ class MCTSNode:
         return child
 
 
-    def update(self, reward: float) -> None:
+    def update(self, reward: float, root_colour: Colour) -> None:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
         """
-        self.visits += 1
+        """
+        if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):           
+            self.value += reward  
+        """
+
         self.value += reward
+        self.visits += 1
 
 """
 Non serialisable version of MCTS
@@ -223,7 +232,7 @@ def mcts_search(
     start_time = time.perf_counter()
     it = 0
 
-    workers = 16 # adjust this for ur pc (run nproc in terminal or tinker urself)
+    workers = 12 # adjust this for ur pc (run nproc in terminal or tinker urself)
 
 
     with Pool(processes=workers) as pool:
@@ -237,7 +246,7 @@ def mcts_search(
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
-                node = node.select_child()
+                node = node.select_child(my_colour,exploration=1.4)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal() and node.untried_moves:
@@ -266,7 +275,7 @@ def mcts_search(
             for reward in rewards:
                 node = child
                 while node is not None:
-                    node.update(reward)
+                    node.update(reward,my_colour)
                     node = node.parent
 
     
