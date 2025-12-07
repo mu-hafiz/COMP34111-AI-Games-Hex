@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
-            print(f"GAME {game}:")
+            print(f"GAME {game+1}:")
             g = Game(
                 player1=Player(
                     name=args.player1Name,
