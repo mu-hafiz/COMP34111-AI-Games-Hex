@@ -232,7 +232,7 @@ def mcts_search(
     start_time = time.perf_counter()
     it = 0
 
-    workers = 12 # adjust this for ur pc (run nproc in terminal or tinker urself)
+    workers = multiprocessing.cpu_count() # adjust this for ur pc (run nproc in terminal or tinker urself)
 
 
     with Pool(processes=workers) as pool:
