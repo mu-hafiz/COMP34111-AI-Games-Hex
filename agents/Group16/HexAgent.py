@@ -246,7 +246,7 @@ def mcts_search(
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
-                node = node.select_child(my_colour,exploration=1.4)
+                node = node.select_child(my_colour,exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal() and node.untried_moves:
@@ -286,13 +286,13 @@ def mcts_search(
         return random.choice(legal_moves)
 
     print("{} iterations ran".format(it))
-    best_child = max(root.children, key=lambda c: c.visits)
+    best_child = max(root.children, key=lambda c: c.value/c.visits)
     return best_child.move
 
 
 # To run the agent:
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p1Name "Group16"
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "Group16" -p2 "agents.Group16.HexAgent HexAgent" 
 
 # to be clear, these two commands change the names of which agent is the MCTS agent and which one is the random agent
 # in particular, MCTS is called "G16" for 1st cmd
@@ -321,7 +321,7 @@ class HexAgent(AgentBase):
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=1000,     # max number of random plays
-            max_time_seconds=2    # time limit per move
+            max_iterations=2000,     # max number of random plays
+            max_time_seconds=4    # time limit per move
         )
         return chosen_move
