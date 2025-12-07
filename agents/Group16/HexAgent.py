@@ -302,6 +302,9 @@ def mcts_search(
 # To play it against itself
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
 
+# To run the analysis over 100 games (this took 2-3 hours for me):
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 100
+
 class HexAgent(AgentBase):
     _board_size: int = 11
     def __init__(self, colour: Colour):
