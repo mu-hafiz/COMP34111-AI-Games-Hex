@@ -66,6 +66,17 @@ if __name__ == "__main__":
             "If the flag is not present, the result will be printed to the console, via stderr."
         ),
     )
+    parser.add_argument(
+        "-a",
+        "--analysis",
+        action="store_true"
+    )
+    parser.add_argument(
+        "-g",
+        "--games",
+        type=int,
+        default=0
+    )
 
     args = parser.parse_args()
     p1_path, p1_class = args.player1.split(" ")
@@ -86,3 +97,9 @@ if __name__ == "__main__":
         verbose=args.verbose,
     )
     g.run()
+
+    print(g.current_player)
+
+# Get win rate
+# Get average number of turns every win
+# Get average number of turns regardless of win or loss
