@@ -188,6 +188,9 @@ class MCTSNode:
         self.visits: int = 0
         self.value: float = 0.0
 
+        self.amaf_value = 0
+        self.amaf_visits = 0
+
     def is_fully_expanded(self) -> bool:
         return len(self.untried_moves) == 0
 
@@ -199,12 +202,23 @@ class MCTSNode:
     def is_terminal(self) -> bool:
         return self._has_someone_won()
 
-    def ucb1(self, child: "MCTSNode", exploration: float = 1.4) -> float:
+    def ucb1(
+        self, child: "MCTSNode", exploration: float = 1.4, amaf_intensity: int = 300
+    ) -> float:
         """UCB1 formula for balancing exploration vs exploitation."""
         if child.visits == 0:
-            return float("inf")  # always explore unvisited child first
+            return float("inf")
 
-        exploit = child.value / child.visits
+        uct_exploit = child.value / child.visits
+
+        if child.amaf_visits > 0:
+            amaf_exploit = child.amaf_value / child.amaf_visits
+        else:
+            amaf_exploit = 0.5  # neutral prior if not seen yet
+
+        beta = amaf_intensity / (child.visits + amaf_intensity)
+
+        exploit = (1 - beta) * uct_exploit + beta * amaf_exploit
         explore = exploration * math.sqrt(math.log(self.visits) / child.visits)
 
         h = total_heuristic(self.board, child.move, self.player_to_move)
@@ -235,28 +249,46 @@ class MCTSNode:
         self.untried_moves.remove(move)
         return child
 
-    def update(self, reward: float) -> None:
+    def update(self, reward: float, rollout_moves: set[tuple[int, int] | None]) -> None:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
         """
+        if self.move in rollout_moves:
+            self.amaf_value += reward
+            self.amaf_visits += 1
+        for child in self.children:
+            if child.move in rollout_moves:
+                child.amaf_value += reward
+                child.amaf_visits += 1
+
         self.visits += 1
         self.value += reward
 
 
-def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
+def play_from_node(
+    node: MCTSNode, my_colour: Colour
+) -> tuple[float, set[tuple[int, int] | None]]:
     """
     From this node's position, play random moves until someone wins.
     Return +1 if my_colour wins or -1 if my_colour loses or 0 for draw (shouldn't happen in Hex).
     """
     board = clone_board(node.board)
     current_player = node.player_to_move
+    rollout_moves = set()
+    rollout_moves.add((node.move.x, node.move.y) if node.move else None)
+
+    if board.has_ended(current_player):
+        if current_player == my_colour:
+            return (1.0, rollout_moves)
+        else:
+            return (-1.0, rollout_moves)
 
     while True:
         legal_moves = get_legal_moves(board)
         if not legal_moves:
             # Shouldn't happen in real Hex, but safe:
-            return 0.0
+            return (0.0, rollout_moves)
 
         # ε-greedy rollout policy biased by connection_score
         epsilon = 0.1
@@ -271,12 +303,13 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
             move = random.choices(legal_moves, probs)[0]
 
         apply_move(board, move, current_player)
+        rollout_moves.add((move.x, move.y))
 
         if board.has_ended(current_player):
             if current_player == my_colour:
-                return 1.0
+                return (1.0, rollout_moves)
             else:
-                return -1.0
+                return (-1.0, rollout_moves)
 
         current_player = Colour.opposite(current_player)
 
@@ -333,11 +366,11 @@ def mcts_search(
             node = node.add_child(move)
 
         # 3) SIMULATION: random playout from this node
-        reward = play_from_node(node, my_colour=my_colour)
+        reward, rollout_moves = play_from_node(node, my_colour=my_colour)
 
         # 4) BACKPROPAGATION: update nodes along path back to root
         while node is not None:
-            node.update(reward)
+            node.update(reward, rollout_moves)
             node = node.parent
 
     # After search: pick child with the most visits
