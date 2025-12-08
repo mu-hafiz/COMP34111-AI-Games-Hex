@@ -1,3 +1,4 @@
+import collections
 import random
 import math
 import time
@@ -8,6 +9,73 @@ from src.AgentBase import AgentBase
 from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
+
+DIRECTIONS = [
+    (-1, 0),
+    (1, 0),
+    (0, -1),
+    (0, 1),
+    (-1, 1),
+    (1, -1),
+]
+
+
+def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
+    queue: collections.deque[tuple[int, int]] = collections.deque()
+    board_size = board.size
+    costs_matrix = [[float("inf")] * board_size for _ in range(board_size)]
+
+    if player_to_move == Colour.RED:
+        for col in range(board_size):
+            row = 0
+            if board.tiles[row][col].colour == Colour.opposite(player_to_move):
+                continue
+            costs_matrix[row][col] = (
+                0 if board.tiles[row][col].colour == player_to_move else 1
+            )
+            queue.append((row, col))
+        SINKS = {(board_size - 1, col) for col in range(board_size)}
+    else:
+        for row in range(board_size):
+            col = 0
+            if board.tiles[row][col].colour == Colour.opposite(player_to_move):
+                continue
+            costs_matrix[row][col] = (
+                0 if board.tiles[row][col].colour == player_to_move else 1
+            )
+            queue.append((row, col))
+        SINKS = {(row, board_size - 1) for row in range(board_size)}
+
+    while queue:
+        row, col = queue.popleft()
+
+        if (row, col) in SINKS:
+            return costs_matrix[row][col]
+
+        for dir_row, dir_col in DIRECTIONS:
+            new_row, new_col = row + dir_row, col + dir_col
+            if (
+                new_row < 0
+                or new_row >= board_size
+                or new_col < 0
+                or new_col >= board_size
+            ):
+                continue
+            if board.tiles[new_row][new_col].colour == Colour.opposite(player_to_move):
+                continue
+
+            cell_cost = (
+                0 if board.tiles[new_row][new_col].colour == player_to_move else 1
+            )
+            total_cost = costs_matrix[row][col] + cell_cost
+
+            if total_cost < costs_matrix[new_row][new_col]:
+                costs_matrix[new_row][new_col] = total_cost
+                if cell_cost == 0:
+                    queue.appendleft((new_row, new_col))
+                else:
+                    queue.append((new_row, new_col))
+    return float("inf")
 
 
 def get_legal_moves(board: Board) -> list[Move]:
