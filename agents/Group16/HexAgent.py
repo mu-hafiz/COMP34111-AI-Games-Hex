@@ -66,6 +66,9 @@ class MCTSNode:
         self.visits: int = 0
         self.value: float = 0.0
 
+        self.amaf_visits: int = 0
+        self.amaf_value: float = 0.0
+
     def is_fully_expanded(self) -> bool:
         return len(self.untried_moves) == 0
 
@@ -77,15 +80,27 @@ class MCTSNode:
     def is_terminal(self) -> bool:
         return self._has_someone_won()
 
-
-    def ucb1(self, child: "MCTSNode", exploration: float = 1.4) -> float:
+    def ucb1(
+        self, child: "MCTSNode", exploration: float = 1.4, amaf_persistence: int = 300
+    ) -> float:
         """UCB1 formula for balancing exploration vs exploitation."""
         # print("I've been visited {} times".format(self.visits))
         if child.visits == 0:
             return float("inf")  # always explore unvisited child first
+
         exploit = child.value / child.visits
+
+        if child.amaf_visits > 0:
+            amaf_exploit = child.amaf_value / child.amaf_visits
+        else:
+            amaf_exploit = 0
+
+        alpha = max(0, (amaf_persistence - self.visits) / amaf_persistence)
+
+        combined_exploit = ((1 - alpha) * exploit) + (alpha * amaf_exploit)
+
         explore = exploration * math.sqrt(math.log(self.visits) / child.visits)
-        return exploit + explore
+        return combined_exploit + explore
 
     def select_child(self, col: Colour, exploration: float = 1.4) -> "MCTSNode":
         """Pick child with highest UCB1 score."""
@@ -93,7 +108,6 @@ class MCTSNode:
             return max(self.children, key=lambda c: self.ucb1(c, exploration))
         else:
             return min(self.children, key=lambda c: self.ucb1(c, exploration))
-
 
     def add_child(self, move: Move) -> "MCTSNode":
         """
@@ -114,8 +128,9 @@ class MCTSNode:
         self.untried_moves.remove(move)
         return child
 
-
-    def update(self, reward: float, root_colour: Colour) -> None:
+    def update(
+        self, reward: float, rollout_moves: set[tuple[int, int]], root_colour: Colour
+    ) -> None:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
@@ -124,6 +139,13 @@ class MCTSNode:
         if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):           
             self.value += reward  
         """
+        for child in self.children:
+            if child.move and (child.move.x, child.move.y) in rollout_moves:
+                child.amaf_visits += 1
+                child.amaf_value += reward
+
+        self.amaf_visits += 1
+        self.amaf_value += reward
 
         self.value += reward
         self.visits += 1
@@ -163,6 +185,9 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
         current_player = Colour.opposite(current_player)
 
 
+def play_from_node_S(
+    board_state: Board, player_to_move: Colour, my_colour: Colour
+) -> tuple[float, set[tuple[int, int]]]:
     """
     From this node's position, play random moves until someone wins.
     Return +1 if my_colour wins or -1 if my_colour loses or 0 for draw (shouldn't happen in Hex).
@@ -170,22 +195,24 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
     """
     board = clone_board(board_state)
     current_player = player_to_move
+    rollout_moves = set()
 
     while True:
         legal_moves = get_legal_moves(board)
         if not legal_moves:
             # Shouldn't happen in real Hex, but safe:
-            return 0.0
+            return (0.0, rollout_moves)
 
         move = random.choice(legal_moves)
         apply_move(board, move, current_player)
+        rollout_moves.add((move.x, move.y))
 
         # Only the player who just moved can have just won
         if board.has_ended(current_player):
             if current_player == my_colour:
-                return 1.0
+                return (1.0, rollout_moves)
             else:
-                return -1.0
+                return (-1.0, rollout_moves)
 
         current_player = Colour.opposite(current_player)
 
@@ -271,13 +298,17 @@ def mcts_search(
             """
             # reward = play_from_node_S(node.board,node.player_to_move, my_colour) (this is the serial integration of parallelisation i.e. workers = 1)
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
+            rollout_results = [
+                pool.apply_async(play_from_node_S, args=args) for args in rollouts
+            ]
+            rollout_results = [r.get() for r in rollout_results]
 
-            it += len(rewards)
+            it += len(rollout_results)
             # 4) BACKPROPAGATION: update nodes along path back to root
-            for reward in rewards:
+            for reward, rollout_moves in rollout_results:
                 node = child
                 while node is not None:
-                    node.update(reward,my_colour)
+                    node.update(reward, rollout_moves, my_colour)
                     node = node.parent
 
     # After search: pick child with the most visits
