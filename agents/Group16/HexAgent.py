@@ -9,6 +9,7 @@ from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
 
+
 def get_legal_moves(board: Board) -> list[Move]:
     """Get a list of all the empty tiles on the board."""
     moves: list[Move] = []
@@ -30,8 +31,9 @@ def clone_board(board: Board) -> Board:
 
 def apply_move(board: Board, move: Move, colour: Colour) -> None:
     """Set the chosen tile to the given colour."""
-    x, y = move.x, move.y 
+    x, y = move.x, move.y
     board.set_tile_colour(x, y, colour)
+
 
 class MCTSNode:
     """
@@ -70,10 +72,7 @@ class MCTSNode:
     def _has_someone_won(self) -> bool:
         # This board is BEFORE player_to_move moves,
         # so the previous mover could have won.
-        return (
-            self.board.has_ended(Colour.RED)
-            or self.board.has_ended(Colour.BLUE)
-        )
+        return self.board.has_ended(Colour.RED) or self.board.has_ended(Colour.BLUE)
 
     def is_terminal(self) -> bool:
         return self._has_someone_won()
@@ -88,7 +87,7 @@ class MCTSNode:
         explore = exploration * math.sqrt(math.log(self.visits) / child.visits)
         return exploit + explore
 
-    def select_child(self, col: Colour , exploration: float = 1.4) -> "MCTSNode":
+    def select_child(self, col: Colour, exploration: float = 1.4) -> "MCTSNode":
         """Pick child with highest UCB1 score."""
         if col == self.player_to_move:
             return max(self.children, key=lambda c: self.ucb1(c, exploration))
@@ -129,11 +128,13 @@ class MCTSNode:
         self.value += reward
         self.visits += 1
 
+
 """
 Non serialisable version of MCTS
 The issue is that the function takes parameter "node" (obj), which is too heavy
 We must create a serialisable function
 """
+
 
 def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
     """
@@ -161,7 +162,7 @@ def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
 
         current_player = Colour.opposite(current_player)
 
-def play_from_node_S(board_state: Board, player_to_move: Colour, my_colour: Colour) -> float:
+
     """
     From this node's position, play random moves until someone wins.
     Return +1 if my_colour wins or -1 if my_colour loses or 0 for draw (shouldn't happen in Hex).
@@ -232,12 +233,16 @@ def mcts_search(
     start_time = time.perf_counter()
     it = 0
 
-    workers = multiprocessing.cpu_count() # adjust this for ur pc (run nproc in terminal or tinker urself)
-
+    workers = (
+        multiprocessing.cpu_count()
+    )  # adjust this for ur pc (run nproc in terminal or tinker urself)
 
     with Pool(processes=workers) as pool:
         while True:
-            if max_time_seconds is not None and (time.perf_counter() - start_time) > max_time_seconds:
+            if (
+                max_time_seconds is not None
+                and (time.perf_counter() - start_time) > max_time_seconds
+            ):
                 break
             if it >= max_iterations:
                 break
@@ -246,29 +251,26 @@ def mcts_search(
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
-                node = node.select_child(my_colour,exploration=0.1)
+                node = node.select_child(my_colour, exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal() and node.untried_moves:
                 move = random.choice(node.untried_moves)
                 node = node.add_child(move)
 
-                child = node # Checkpoint for rewarding rollouts
+                child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
             """
             not serialisable
             reward = play_from_node(node, my_colour=my_colour)
             """
-            
+
             """
             serialisable
             """
             # reward = play_from_node_S(node.board,node.player_to_move, my_colour) (this is the serial integration of parallelisation i.e. workers = 1)
-            rollouts = [(child.board,child.player_to_move,my_colour)]*workers
-            rewards = [pool.apply_async(play_from_node_S, args=args) for args in rollouts]
-            rewards = [r.get() for r in rewards]
-
+            rollouts = [(child.board, child.player_to_move, my_colour)] * workers
 
             it += len(rewards)
             # 4) BACKPROPAGATION: update nodes along path back to root
@@ -278,7 +280,6 @@ def mcts_search(
                     node.update(reward,my_colour)
                     node = node.parent
 
-    
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
@@ -286,17 +287,17 @@ def mcts_search(
         return random.choice(legal_moves)
 
     print("{} iterations ran".format(it))
-    best_child = max(root.children, key=lambda c: c.value/c.visits)
+    best_child = max(root.children, key=lambda c: c.value / c.visits)
     return best_child.move
 
 
 # To run the agent:
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "Group16" -p2 "agents.Group16.HexAgent HexAgent" 
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "Group16" -p2 "agents.Group16.HexAgent HexAgent"
 
 # to be clear, these two commands change the names of which agent is the MCTS agent and which one is the random agent
 # in particular, MCTS is called "G16" for 1st cmd
-# and MCTS is called "TestAgent" for 2nd cmd 
+# and MCTS is called "TestAgent" for 2nd cmd
 # im not changing it incase this is on purpose
 
 # To play it against itself
@@ -305,8 +306,10 @@ def mcts_search(
 # To run the analysis over 100 games (this took 2-3 hours for me):
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 100
 
+
 class HexAgent(AgentBase):
     _board_size: int = 11
+
     def __init__(self, colour: Colour):
         super().__init__(colour)
 
@@ -324,7 +327,7 @@ class HexAgent(AgentBase):
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=2000,     # max number of random plays
-            max_time_seconds=4    # time limit per move
+            max_iterations=2000,  # max number of random plays
+            max_time_seconds=4,  # time limit per move
         )
         return chosen_move
