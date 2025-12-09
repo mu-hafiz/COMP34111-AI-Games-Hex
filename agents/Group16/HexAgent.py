@@ -334,6 +334,8 @@ def mcts_search(
         multiprocessing.cpu_count()
     )  # adjust this for ur pc (run nproc in terminal or tinker urself)
 
+    instant_victory = None
+
     with Pool(processes=workers) as pool:
         while True:
             if (
@@ -346,6 +348,9 @@ def mcts_search(
 
             node = root
 
+            # bad version
+
+
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
                 node = node.select_child(my_colour, exploration=0.1)
@@ -357,6 +362,14 @@ def mcts_search(
 
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
+
+
+            # how do we return the move we just played as a 
+            if node.is_terminal(): 
+                instant_victory = move
+
+
+            
 
             """
             not serialisable
@@ -380,6 +393,7 @@ def mcts_search(
                 while node is not None:
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
+            if instant_victory: break
 
     # After search: pick child with the most visits
     if not root.children:
@@ -397,7 +411,7 @@ def mcts_search(
             ucb = root.ucb1(child, exploration)
             mv = child.move
             avg_move_count = (child.move_count_sum / amafvisits) if amafvisits > 0 else 0.0
-            min_move_count = child.move_count_min if child.move_count_min != float('inf') else 0
+            min_move_count = (child.move_count_min+1) if child.move_count_min != float('inf') else 0
             return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
 
         children = list(root.children)
@@ -416,6 +430,7 @@ def mcts_search(
             -c.move_count_min if c.move_count_min != float('inf') else 0  # secondary: shortest winning rollout
         )
     )
+    if instant_victory: return move
     return best_child.move
 
 
@@ -432,7 +447,7 @@ def mcts_search(
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
 
 # To run the analysis over 100 games (this took 2-3 hours for me):
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 100
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
 
 
 class HexAgent(AgentBase):
@@ -457,7 +472,7 @@ class HexAgent(AgentBase):
             root_board=board,
             my_colour=self.colour,
             max_iterations=5000,          # max number of random plays
-            max_time_seconds=4,           # time limit per move
+            max_time_seconds=2,           # time limit per move
             report_top_k=5,               # show top-5 for normal turns
             root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
         )
