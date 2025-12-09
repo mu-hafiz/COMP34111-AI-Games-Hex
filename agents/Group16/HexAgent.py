@@ -115,6 +115,9 @@ class MCTSNode:
 
         self.amaf_visits: int = 0
         self.amaf_value: float = 0.0
+        
+        self.move_count_sum: float = 0.0    # sum of rollout lengths (for avg)
+        self.move_count_min: float = float('inf')  # NEW: track minimum rollout length
 
     def is_fully_expanded(self) -> bool:
         return len(self.untried_moves) == 0
@@ -181,18 +184,24 @@ class MCTSNode:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
-        """
-        """
         if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):           
             self.value += reward  
         """
+        rollout_length = len(rollout_moves)
+        
         for child in self.children:
             if child.move and (child.move.x, child.move.y) in rollout_moves:
                 child.amaf_visits += 1
                 child.amaf_value += reward
+                child.move_count_sum += rollout_length
+                if reward > 0:  # only track min for winning rollouts
+                    child.move_count_min = min(child.move_count_min, rollout_length)
 
         self.amaf_visits += 1
         self.amaf_value += reward
+        self.move_count_sum += rollout_length
+        if reward > 0:
+            self.move_count_min = min(self.move_count_min, rollout_length)
 
         self.value += reward
         self.visits += 1
@@ -383,10 +392,13 @@ def mcts_search(
         # compute stats for each child
         def child_stats(child: MCTSNode):
             visits = child.visits
+            amafvisits = child.amaf_visits
             winrate = (child.value / visits) if visits > 0 else 0.0
             ucb = root.ucb1(child, exploration)
             mv = child.move
-            return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb}
+            avg_move_count = (child.move_count_sum / amafvisits) if amafvisits > 0 else 0.0
+            min_move_count = child.move_count_min if child.move_count_min != float('inf') else 0
+            return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
 
         children = list(root.children)
         by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
@@ -395,9 +407,15 @@ def mcts_search(
         print("Top by winrate:")
         for c in by_valuevisits:
             s = child_stats(c)
-            print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f}")
+            print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f} min={s['min_move_count']:.0f} avg={s['avg_move_count']:.1f}")
 
-    best_child = max(root.children, key=lambda c: c.value / c.visits)
+    best_child = max(
+        root.children, 
+        key=lambda c: (
+            c.value / c.visits,  # primary: winrate (higher is better)
+            -c.move_count_min if c.move_count_min != float('inf') else 0  # secondary: shortest winning rollout
+        )
+    )
     return best_child.move
 
 
