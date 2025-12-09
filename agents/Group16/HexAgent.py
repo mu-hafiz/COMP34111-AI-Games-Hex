@@ -389,11 +389,11 @@ def mcts_search(
             return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb}
 
         children = list(root.children)
-        by_visits = sorted(children, key=lambda c: c.visits, reverse=True)[:report_top_k]
+        by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
 
         print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
-        print("Top by visits:")
-        for c in by_visits:
+        print("Top by winrate:")
+        for c in by_valuevisits:
             s = child_stats(c)
             print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f}")
 
@@ -438,7 +438,7 @@ class HexAgent(AgentBase):
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=2000,          # max number of random plays
+            max_iterations=5000,          # max number of random plays
             max_time_seconds=4,           # time limit per move
             report_top_k=5,               # show top-5 for normal turns
             root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
