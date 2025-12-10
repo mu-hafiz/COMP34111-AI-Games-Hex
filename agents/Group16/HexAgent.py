@@ -20,6 +20,54 @@ DIRECTIONS = [
 ]
 
 
+def in_bounds(board: Board, row: int, col: int):
+    board_size = board.size
+    return 0 <= row < board_size and 0 <= col < board_size
+
+
+def prune_dead_cells(
+    board: Board,
+    moves: list[Move],
+    my_moves_to_win: float,
+    opponent_moves_to_win: float,
+    my_colour: Colour,
+) -> list[Move]:
+    remaining_moves = []
+    for move in moves:
+        row, col = move.x, move.y
+        is_adjacent_to_any_stone = any(
+            in_bounds(board=board, row=row + dir_row, col=col + dir_col)
+            and (
+                board.tiles[row + dir_row][col + dir_col].colour
+                in (my_colour, Colour.opposite(my_colour))
+            )
+            for dir_row, dir_col in DIRECTIONS
+        )
+
+        if is_adjacent_to_any_stone:
+            remaining_moves.append(move)
+            continue
+
+        original_cell_state = board.tiles[row][col].colour
+
+        apply_move(board, move, my_colour)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
+        new_opponents_moves_to_win = calculate_moves_needed_to_win(
+            board, Colour.opposite(my_colour)
+        )
+
+        board.tiles[row][col].colour = original_cell_state
+
+        if (
+            new_my_moves_to_win < my_moves_to_win
+            or new_opponents_moves_to_win > opponent_moves_to_win
+        ):
+            remaining_moves.append(move)
+    if not remaining_moves:
+        return moves
+    return remaining_moves
+
+
 def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
     queue: collections.deque[tuple[int, int]] = collections.deque()
     board_size = board.size
@@ -54,12 +102,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
 
         for dir_row, dir_col in DIRECTIONS:
             new_row, new_col = row + dir_row, col + dir_col
-            if (
-                new_row < 0
-                or new_row >= board_size
-                or new_col < 0
-                or new_col >= board_size
-            ):
+            if not in_bounds(board=board, row=new_row, col=new_col):
                 continue
             if board.tiles[new_row][new_col].colour == Colour.opposite(player_to_move):
                 continue
@@ -137,7 +180,11 @@ class MCTSNode:
         self.amaf_visits: int = 0
         self.amaf_value: float = 0.0
 
+        self.pruned_moves: list[Move] | None = None
+
     def is_fully_expanded(self) -> bool:
+        if self.pruned_moves is not None:
+            return len(self.pruned_moves) == 0
         return len(self.untried_moves) == 0
 
     def _has_someone_won(self) -> bool:
@@ -194,6 +241,8 @@ class MCTSNode:
         )
         self.children.append(child)
         self.untried_moves.remove(move)
+        if self.pruned_moves is not None:  # should never be None
+            self.pruned_moves.remove(move)
         return child
 
     def update(
@@ -349,10 +398,24 @@ def mcts_search(
                 node = node.select_child(my_colour, exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
-            if not node.is_terminal() and node.untried_moves:
-                move = random.choice(node.untried_moves)
-                node = node.add_child(move)
+            if not node.is_terminal():
+                if node.pruned_moves is None:
+                    my_moves_to_win = calculate_moves_needed_to_win(
+                        node.board, node.player_to_move
+                    )
+                    opponent_moves_to_win = calculate_moves_needed_to_win(
+                        node.board, Colour.opposite(node.player_to_move)
+                    )
+                    node.pruned_moves = prune_dead_cells(
+                        node.board,
+                        node.untried_moves,
+                        my_moves_to_win,
+                        opponent_moves_to_win,
+                        my_colour,
+                    )
 
+                move = random.choice(node.pruned_moves)
+                node = node.add_child(move)
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
