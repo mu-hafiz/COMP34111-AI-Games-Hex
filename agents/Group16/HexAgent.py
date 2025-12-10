@@ -208,40 +208,6 @@ class MCTSNode:
         self.visits += 1
 
 
-"""
-Non serialisable version of MCTS
-The issue is that the function takes parameter "node" (obj), which is too heavy
-We must create a serialisable function
-"""
-
-
-def play_from_node(node: MCTSNode, my_colour: Colour) -> float:
-    """
-    From this node's position, play random moves until someone wins.
-    Return +1 if my_colour wins or -1 if my_colour loses or 0 for draw (shouldn't happen in Hex).
-    """
-    board = clone_board(node.board)
-    current_player = node.player_to_move
-
-    while True:
-        legal_moves = get_legal_moves(board)
-        if not legal_moves:
-            # Shouldn't happen in real Hex, but safe:
-            return 0.0
-
-        move = random.choice(legal_moves)
-        apply_move(board, move, current_player)
-
-        # Only the player who just moved can have just won
-        if board.has_ended(current_player):
-            if current_player == my_colour:
-                return 1.0
-            else:
-                return -1.0
-
-        current_player = Colour.opposite(current_player)
-
-
 def play_from_node_S(
     board_state: Board, player_to_move: Colour, my_colour: Colour
 ) -> tuple[float, set[tuple[int, int]]]:
@@ -379,7 +345,8 @@ def mcts_search(
 
     workers = (
         multiprocessing.cpu_count()
-    )  # adjust this for ur pc (run nproc in terminal or tinker urself)
+    )  
+
 
     instant_victory = None
 
@@ -397,9 +364,6 @@ def mcts_search(
 
             node = root
 
-            # bad version
-
-
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
                 node = node.select_child(my_colour, exploration=0.1)
@@ -412,24 +376,10 @@ def mcts_search(
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
-
-            # how do we return the move we just played as a 
+            # If the node we picked wins in one move, play it
             if node.is_terminal(): 
                 instant_victory = move
 
-
-            
-
-            """
-            not serialisable
-            reward = play_from_node(node, my_colour=my_colour)
-            """
-
-            """
-            serialisable
-            """
-            # reward = play_from_node_S(node.board,node.player_to_move, my_colour) 
-            # this is the serial integration of parallelisation i.e. workers = 1)
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
             rollout_results = [
                 pool.apply_async(play_from_node_S, args=args) for args in rollouts
@@ -484,41 +434,33 @@ def mcts_search(
     return best_child.move
 
 
-# To run the agent:
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "Group16" -p2 "agents.Group16.HexAgent HexAgent"
-
-# to be clear, these two commands change the names of which agent is the MCTS agent and which one is the random agent
-# in particular, MCTS is called "G16" for 1st cmd
-# and MCTS is called "TestAgent" for 2nd cmd
-# im not changing it incase this is on purpose
-
-# To play it against itself
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
-
-# To run the analysis over 100 games (this took 2-3 hours for me):
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
-
-
 def cardinal_dirs(direction,current_tile:Move):
+    """
+    Calculate all possible strong connections from a given tile
+    """
     x = current_tile.x
     y = current_tile.y
-    dirs{
-        "N" : [(max(x-1,0),y),(max(x-1,0),min(y+1,10)),(max(x-2,0),min(y+1,10))],
-        "NE" : [(max(x-1,0),min(y+1,10)),(x,min(y+1,10)),(max(x-1,0),min(y+2,10))],
-        "NW" : [(max(x-1,0),y),(x,max(y-1,0)),(max(x-1,0),max(y-1,0))],
-        "SE" : [(x,min(y+1,10)),(min(x+1,10),y),(min(x+1,10),min(y+1,10))],
-        "SW" : [(x,max(y-1,0)),(min(x+1,10),max(y-1,0)),(min(x+1,10),max(y-2,0))],
-        "S" : [(min(x+1,10),max(y-1,0)),(min(x+1,10),y),(min(x+2,10),max(y-1,0))],
-    }
+    
+    # A dictionary of triplets (a,b,c) representing strong connections and the bridges between them
+    # a : Bridge
+    # b : Bridge
+    # c : Strong connection
+    dirs = {
+        "N" : [Move(max(x-1,0),y),Move(max(x-1,0),min(y+1,10)),Move(max(x-2,0),min(y+1,10))],
+        "NE" : [Move(max(x-1,0),min(y+1,10)),Move(x,min(y+1,10)),Move(max(x-1,0),min(y+2,10))],
+        "NW" : [Move(max(x-1,0),y),Move(x,max(y-1,0)),Move(max(x-1,0),max(y-1,0))],
+        "SE" : [Move(x,min(y+1,10)),Move(min(x+1,10),y),Move(min(x+1,10),min(y+1,10))],
+        "SW" : [Move(x,max(y-1,0)),Move(min(x+1,10),max(y-1,0)),Move(min(x+1,10),max(y-2,0))],
+        "S" : [Move(min(x+1,10),max(y-1,0)),Move(min(x+1,10),y),Move(min(x+2,10),max(y-1,0))],
+        }
 
-    # we dont have the board when we're in here, so we cant check if things are free, can we
 
     legals = get_legal_moves()
-
-
     result = []
 
+    # For each triplet associated with a strong connection
+    # If one tile of that triplet is illegal, disregard the entire triplet
+    # Otherwise, add it to the list of possible strong connections
     for direc in dirs.keys():
         for triplet in dirs[direc]:
             for item in triplet:
@@ -533,10 +475,36 @@ def cardinal_dirs(direction,current_tile:Move):
 class HexAgent(AgentBase):
     _board_size: int = 11
 
+    """
+    HexAgent class
+    ---
+    Attributes
+    ---
+    Dictionary adjacency_matrix
+        Given a tile (Move), returns adjacent tiles in a list (List[Move])
+    defaultdict(False) current_bridges: Key is a tile, Returned value is a tile, Default value is False (None doesn't work)
+        Given a tile (Move), if that tile is a bridge, return the other bridge it's corresponding bridge (Move), otherwise return False
+        what if it belongs to more than one strong connection????
+    Dictionary potential_connections: 
+        Given a tile (Move) which is a strong connection, return the bridges it is dependent on 
+    ---
+    """
 
+
+    def __init__(self, colour: Colour):
+        self.adjacency_matrix = self.set_adjacency_matrix() # Initialise Adjacency matrix
+        self.current_bridges = defaultdict(False) 
+        self.potential_connections = {}
+        super().__init__(colour)
+
+    
     def adjacency_setup(self,current_tile: Move):
+        """
+        Calculates all adjacent tiles from a given move current_tile
+        """
         x = current_tile.x
         y = current_tile.y
+        
         adjacent_moveset=[
             current_tile,
             Move(x, min(y+1,10)),
@@ -546,37 +514,37 @@ class HexAgent(AgentBase):
             Move(min(x+1,10), y),
             Move(x, max(y-1,0)),
         ]
-
-        
         adjacent_moveset = list(set(adjacent_moveset))
         adjacent_moveset.remove(current_tile)
         return adjacent_moveset
 
     def set_adjacency_matrix(self):
+        """
+        Helper function that uses adjacency_setup to set up self.adjacency_matrix
+        """
         adj = {}
         for i in range(11):
             for j in range(11):
                 adj[Move(i,j)] = self.adjacency_setup(Move(i,j))
         return adj
 
-    def __init__(self, colour: Colour):
-        self.adjacency_matrix = self.set_adjacency_matrix()
-        self.current_bridges = defaultdict(defaultfactory=None) # bridge : other bridge
-        self.potential_connections = {} # strong connnection : [bridge, other bridge]
-        
-        super().__init__(colour)
+
 
     def check_reach(self, board):
-
+        """
+        Given a board, can the agent win the game if it were to play all its strong connections?
+        Returns a solution if True
+        Return False otherwise (?)
+        """
         board_copy = clone_board(board)
-        # Add strongly connected bridges to the board
+        # Add strongly connected bridges to the board as if they've already been played
         for move in self.current_bridges:
             board_copy.tiles[move.x][move.y].colour = self.colour
-        while board.has_ended():
-            #We win
 
-            # keep cutting links out the path (and their bridges) until we have the only essential path we need to reach the end
-
+        # Check if we win
+        while board.has_ended(self.colour):
+            # We win
+            # Keep cutting links out the path (and their bridges) until we have the only essential path we need to reach the end
             # Return the list of strong connections we need to win
             return True
         # Return false (we dont win rn)
@@ -594,34 +562,46 @@ class HexAgent(AgentBase):
             if should_swap(board, opp_move):
                 return Move(-1, -1)
 
-        # If opp_move takes bridge DONE
-        # Enforce other path of bridge DONE
-        # del(dict[taken_bridge]) DONE
-        # del(dict[pair]) DONE
-        if current_bridges[opp_move]:
-            move_we_take = current_bridges.pop(opp_move)
-            current_bridges.pop(move_we_take)
+
+        """
+        This section is for determining what the goal of the Agent should be
+        And so therefore what root_allowed_moves (designed to move_set) should be
+        
+        I think it would be good if we were to create a (written) priority list so we know what our move_set should be
+        """
+
+        # Check if the opponent has taken a bridge from us 
+        # If so, take the capture the other untaken bridge we still have
+        if self.current_bridges[opp_move]:
+            move_we_take = self.current_bridges.pop(opp_move)
+            self.current_bridges.pop(move_we_take)
             return move_we_take
-            
-
-        # determine if we've already won
-
-        # if they mess with one of our part of our potential triplet (bridge, bridge, connection), we have to discard the potential connection entirely 
-        # remove (taken potential bridge, other path of taken potential bridge, potential virtual connection )
 
 
-        # Else pick a move out of list of potential strong connections
-
-        # Determine the goal
-        # Based on goal, assign root_allowed_moves
-
+        # Determine if we've already won
         if self.check_reach():
+            # To implement
+            pass
 
+            
+        # Refactoring root_allowed_moves from a ternary operator to a if statement
+        # Old: move_set (A.K.A root_allowed_moves) = get_fair_first_moves(board) if turn == 1 else self.potential_connections.keys()
+        move_set = []
+        # If it's the first turn
+        if turn == 1:
+            # Pick a "fair" move
+            move_set = get_fair_first_moves(board)
+        else:
+            # Otherwise, pick a virtual connection
+            move_set = self.potential_connections.keys()
+    
 
-
-        # if they haven't, do mcts on our list of potential strong connections, which returns a move
-        # after we make a move, we need to add to the list of potential strong connections we have made by making that move
-        # and the bridge points the enemy could potentially take form us
+        # root_allowed_moves/move_set
+        # The set of moves that we will allow MCTS to access for the purpose of simulating victories.
+        # root_allowed_moves is dependent on the analysis of the boardstate
+        # E.g.
+        #   If we have what we need to win, root_allowed_moves = our strong connections
+        #   If we still don't have what we need but we're winning, establish new connections?
 
         chosen_move = mcts_search(
             root_board=board,
@@ -629,32 +609,50 @@ class HexAgent(AgentBase):
             max_iterations=5000,          # max number of random plays
             max_time_seconds=2,           # time limit per move
             report_top_k=5,               # show top-5 for normal turns
-            root_allowed_moves=get_fair_first_moves(board) if turn == 1 else potential_connections.keys()
+            root_allowed_moves=move_set
         )
 
 
 
 
-        # have a component to determine when we have enough strong connections to unstoppably win the game
-        #
+        """
+        After this point, we will have chosen a move to play.
+        Update the following:
+            self.potential_connections
+                - Our move must have already existed in potential connections (i feel like this is wrong but we'll cross that bridge when we get to it)
+                - It's no longer potential, as we are now playing this move
+                - So remove it from our dictionary of potential connections
+            current_bridges
+                - Adding a new strong connection inherently must come with bridges
+                - Add those to our current bridges
+        """
 
-        # if our current our current bridges forms a path to the end, form that bridge
-    
-    
 
- 
-
-        # Add the potential triplets to the potential connections
+        # Add the new potential triplets to the potential connections
         potential_triplets = cardinal_dirs(chosen_move)
-        # Break this down into what are connections are
-
         for triplet in potential_triplets:
             # Create format for potential connections dictionary
             self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
 
-        bridges = potential_connections[chosen_move]
-        current_bridges[bridges[0]] = bridges[1]
-        current_bridges[bridges[1]] = bridges[0]
-        del potential_connections[chosen_move]
+        # Add the linked pair of bridges to current_bridges
+        bridges = self.potential_connections[chosen_move]
+        self.current_bridges[bridges[0]] = bridges[1]
+        self.current_bridges[bridges[1]] = bridges[0]
+
+        # Remove the connection we just made from potential_connections
+        del self.potential_connections[chosen_move]
 
         return chosen_move
+
+
+# Agent VS Naive:
+# Red
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
+# Blue
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "Group16" -p2 "agents.Group16.HexAgent HexAgent"
+
+# Agent VS Agent
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
+
+# To run the analysis over 100 games (this took 2-3 hours for me):
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
