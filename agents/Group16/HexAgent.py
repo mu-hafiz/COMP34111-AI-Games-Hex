@@ -20,6 +20,36 @@ DIRECTIONS = [
 ]
 
 
+def prune_dead_cells(
+    board: Board,
+    moves: list[Move],
+    my_moves_to_win: float,
+    opponent_moves_to_win: float,
+    my_colour: Colour,
+) -> list[Move]:
+    remaining_moves = []
+    for move in moves:
+        row, col = move.x, move.y
+        original_cell_state = board.tiles[row][col].colour
+
+        apply_move(board, move, my_colour)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
+        new_opponents_moves_to_win = calculate_moves_needed_to_win(
+            board, Colour.opposite(my_colour)
+        )
+
+        board.tiles[row][col].colour = original_cell_state
+
+        if not (
+            new_my_moves_to_win >= my_moves_to_win
+            and new_opponents_moves_to_win <= opponent_moves_to_win
+        ):
+            remaining_moves.append(move)
+    if not remaining_moves:
+        return moves
+    return remaining_moves
+
+
 def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
     queue: collections.deque[tuple[int, int]] = collections.deque()
     board_size = board.size
@@ -350,7 +380,22 @@ def mcts_search(
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal() and node.untried_moves:
-                move = random.choice(node.untried_moves)
+                my_moves_to_win = calculate_moves_needed_to_win(
+                    node.board, node.player_to_move
+                )
+                opponent_moves_to_win = calculate_moves_needed_to_win(
+                    node.board, Colour.opposite(node.player_to_move)
+                )
+                remaining_legal_moves = prune_dead_cells(
+                    node.board,
+                    node.untried_moves,
+                    my_moves_to_win,
+                    opponent_moves_to_win,
+                    my_colour,
+                )
+                move = random.choice(remaining_legal_moves)
+
+                # move = random.choice(node.untried_moves)
                 node = node.add_child(move)
 
                 child = node  # Checkpoint for rewarding rollouts
