@@ -8,6 +8,7 @@ from src.AgentBase import AgentBase
 from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
+from collections import defaultdict
 
 
 def get_legal_moves(board: Board) -> list[Move]:
@@ -290,8 +291,54 @@ def parallelised_rollouts(child_board: Board, child_player: Colour, my_col: Colo
 
     # unpickle rewards
     return rewards  
-
 """
+
+
+
+
+def connection_points(move: Move):
+    x = move.x
+    y = move.y
+
+    return [(Move(x-1, y-1),"NW"), (Move(x-2, y+1),"N"), (Move(x-1, y+2),"NE"), (Move(x+1, y+1),"SE"), (Move(x+2, y-1),"S"), (Move(x+1, y-2),"SW")]
+
+
+
+def find_virtual_connections(board: Board,player_to_move: Colour):
+
+    """
+    Checking each of these cells
+    virtual connections:
+        x-1, y-1
+        x-2, y+1
+        x-1, y+2
+        x+1, y+1
+        x+2, y-1
+        x+1, y-2
+    """
+
+    avail_moves = get_legal_moves(board)
+    colour_moves = get_colour_moves(board, player_to_move)
+
+
+    for move in colour_moves:
+        for potential_move in connection_points(move):
+            if potential_move in avail_moves:         
+                continue
+
+    return
+
+
+
+
+def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
+    """Get a list of all the empty tiles on the board."""
+    moves: list[Move] = []
+    for x in range(board.size):
+        for y in range(board.size):
+            if board.tiles[x][y].colour is colour:
+                moves.append(Move(x, y))
+    return moves
 
 
 def mcts_search(
@@ -336,6 +383,8 @@ def mcts_search(
 
     instant_victory = None
 
+
+
     with Pool(processes=workers) as pool:
         while True:
             if (
@@ -379,7 +428,8 @@ def mcts_search(
             """
             serialisable
             """
-            # reward = play_from_node_S(node.board,node.player_to_move, my_colour) (this is the serial integration of parallelisation i.e. workers = 1)
+            # reward = play_from_node_S(node.board,node.player_to_move, my_colour) 
+            # this is the serial integration of parallelisation i.e. workers = 1)
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
             rollout_results = [
                 pool.apply_async(play_from_node_S, args=args) for args in rollouts
@@ -450,11 +500,86 @@ def mcts_search(
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
 
 
+def cardinal_dirs(direction,current_tile:Move):
+    x = current_tile.x
+    y = current_tile.y
+    dirs{
+        "N" : [(max(x-1,0),y),(max(x-1,0),min(y+1,10)),(max(x-2,0),min(y+1,10))],
+        "NE" : [(max(x-1,0),min(y+1,10)),(x,min(y+1,10)),(max(x-1,0),min(y+2,10))],
+        "NW" : [(max(x-1,0),y),(x,max(y-1,0)),(max(x-1,0),max(y-1,0))],
+        "SE" : [(x,min(y+1,10)),(min(x+1,10),y),(min(x+1,10),min(y+1,10))],
+        "SW" : [(x,max(y-1,0)),(min(x+1,10),max(y-1,0)),(min(x+1,10),max(y-2,0))],
+        "S" : [(min(x+1,10),max(y-1,0)),(min(x+1,10),y),(min(x+2,10),max(y-1,0))],
+    }
+
+    # we dont have the board when we're in here, so we cant check if things are free, can we
+
+    legals = get_legal_moves()
+
+
+    result = []
+
+    for direc in dirs.keys():
+        for triplet in dirs[direc]:
+            for item in triplet:
+                if item not in legals:
+                    triplet = None
+            if triplet:
+                result += triplet
+
+    return result
+
+
 class HexAgent(AgentBase):
     _board_size: int = 11
 
+
+    def adjacency_setup(self,current_tile: Move):
+        x = current_tile.x
+        y = current_tile.y
+        adjacent_moveset=[
+            current_tile,
+            Move(x, min(y+1,10)),
+            Move(min(x+1,10), max(y-1,0)),
+            Move(max(x-1,0), y),
+            Move(max(x-1,0), min(y+1,10)),
+            Move(min(x+1,10), y),
+            Move(x, max(y-1,0)),
+        ]
+
+        
+        adjacent_moveset = list(set(adjacent_moveset))
+        adjacent_moveset.remove(current_tile)
+        return adjacent_moveset
+
+    def set_adjacency_matrix(self):
+        adj = {}
+        for i in range(11):
+            for j in range(11):
+                adj[Move(i,j)] = self.adjacency_setup(Move(i,j))
+        return adj
+
     def __init__(self, colour: Colour):
+        self.adjacency_matrix = self.set_adjacency_matrix()
+        self.current_bridges = defaultdict(defaultfactory=None) # bridge : other bridge
+        self.potential_connections = {} # strong connnection : [bridge, other bridge]
+        
         super().__init__(colour)
+
+    def check_reach(self, board):
+
+        board_copy = clone_board(board)
+        # Add strongly connected bridges to the board
+        for move in self.current_bridges:
+            board_copy.tiles[move.x][move.y].colour = self.colour
+        while board.has_ended():
+            #We win
+
+            # keep cutting links out the path (and their bridges) until we have the only essential path we need to reach the end
+
+            # Return the list of strong connections we need to win
+            return True
+        # Return false (we dont win rn)
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """
@@ -464,9 +589,39 @@ class HexAgent(AgentBase):
         Subsequent turns: Use MCTS to select the best move.
         """
 
+
         if turn == 2:
             if should_swap(board, opp_move):
                 return Move(-1, -1)
+
+        # If opp_move takes bridge DONE
+        # Enforce other path of bridge DONE
+        # del(dict[taken_bridge]) DONE
+        # del(dict[pair]) DONE
+        if current_bridges[opp_move]:
+            move_we_take = current_bridges.pop(opp_move)
+            current_bridges.pop(move_we_take)
+            return move_we_take
+            
+
+        # determine if we've already won
+
+        # if they mess with one of our part of our potential triplet (bridge, bridge, connection), we have to discard the potential connection entirely 
+        # remove (taken potential bridge, other path of taken potential bridge, potential virtual connection )
+
+
+        # Else pick a move out of list of potential strong connections
+
+        # Determine the goal
+        # Based on goal, assign root_allowed_moves
+
+        if self.check_reach():
+
+
+
+        # if they haven't, do mcts on our list of potential strong connections, which returns a move
+        # after we make a move, we need to add to the list of potential strong connections we have made by making that move
+        # and the bridge points the enemy could potentially take form us
 
         chosen_move = mcts_search(
             root_board=board,
@@ -474,6 +629,32 @@ class HexAgent(AgentBase):
             max_iterations=5000,          # max number of random plays
             max_time_seconds=2,           # time limit per move
             report_top_k=5,               # show top-5 for normal turns
-            root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
+            root_allowed_moves=get_fair_first_moves(board) if turn == 1 else potential_connections.keys()
         )
+
+
+
+
+        # have a component to determine when we have enough strong connections to unstoppably win the game
+        #
+
+        # if our current our current bridges forms a path to the end, form that bridge
+    
+    
+
+ 
+
+        # Add the potential triplets to the potential connections
+        potential_triplets = cardinal_dirs(chosen_move)
+        # Break this down into what are connections are
+
+        for triplet in potential_triplets:
+            # Create format for potential connections dictionary
+            self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
+
+        bridges = potential_connections[chosen_move]
+        current_bridges[bridges[0]] = bridges[1]
+        current_bridges[bridges[1]] = bridges[0]
+        del potential_connections[chosen_move]
+
         return chosen_move
