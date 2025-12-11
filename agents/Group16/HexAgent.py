@@ -40,15 +40,16 @@ def get_fair_first_moves(board: Board) -> set[tuple[int, int]]:
     """
     size = board.size
 
-    base_candidates = {(1, 2), (1, 7), (2, 5), (8, 5), (9, 2), (9, 7)}
+    base_candidates = {Move(1, 2), Move(1, 7), Move(2, 5), Move(8, 5), Move(9, 2), Move(9, 7)}
 
     # Add edge candidates avoiding corners
     candidates = base_candidates.copy()
     for x in range(size):
         if x >= 2:                 # left edge
-            candidates.add((x, 0))
+            candidates.add(Move(x, 0))
         if x <= size - 3:          # right edge
-            candidates.add((x, size - 1))
+            candidates.add(Move(x, size - 1))
+    
     return candidates
 
 def is_central(move: Move, size: int) -> bool:
@@ -333,7 +334,7 @@ def mcts_search(
      # If a restricted candidate list is provided, limit/expand the root to only those moves.
     if root_allowed_moves is not None:
         # keep only allowed moves in root.untried_moves
-        root.untried_moves = [m for m in root.untried_moves if (m.x, m.y) in root_allowed_moves]
+        root.untried_moves = root_allowed_moves
         # pre-expand each allowed move as a child so the search distributes sims among them
         for move in list(root.untried_moves):
             root.add_child(move)
@@ -391,14 +392,15 @@ def mcts_search(
                 while node is not None:
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
-            if instant_victory: break
+            if instant_victory:
+                return move
 
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
-
+    print()
     # Optionally prepare and print top-k rankings
     if report_top_k is not None and report_top_k > 0 and root.children:
         # compute stats for each child
@@ -588,6 +590,9 @@ class HexAgent(AgentBase):
             if should_swap(board, opp_move):
                 return Move(-1, -1)
 
+        if opp_move == Move(-1,-1):
+            self.potential_connections = {}
+            self.current_bridges = {}
 
         """
         This section is for determining what the goal of the Agent should be
@@ -598,8 +603,8 @@ class HexAgent(AgentBase):
 
         # Check if the opponent has taken a bridge from us 
         # If so, take the capture the other untaken bridge we still have
+        # print(self.current_bridges)
         if self.current_bridges.get(opp_move,[]):
-
             # This can either be either 1, or 2  OR 3 bridges
             connected_bridges = self.current_bridges[opp_move]
             
@@ -612,9 +617,24 @@ class HexAgent(AgentBase):
                 move_set = connected_bridges
             else: 
                 move_we_take = self.current_bridges.pop(opp_move)
-                del self.current_bridges[move_we_take]
-                return move_we_take
+                del self.current_bridges[move_we_take[0]]
+                # print("I exited through return statement 1")
+                return move_we_take[0]
 
+        if self.potential_connections.get(opp_move,[]):
+            # The enemy took a pot con
+            del self.potential_connections[opp_move]
+
+        temp_inverted_list = {}
+        for pot_con in list(self.potential_connections.keys()):
+            for bridge in self.potential_connections[pot_con]:
+                temp_inverted_list[bridge] = pot_con
+
+        # print("this is disgusting")
+        # print(temp_inverted_list)
+        if temp_inverted_list.get(opp_move,[]):
+            # print("HE TOOK OUR BRIDGE")
+            del self.potential_connections[temp_inverted_list[opp_move]]
 
         # Determine if we've already won
         if self.check_reach(board,self.current_bridges):
@@ -638,7 +658,7 @@ class HexAgent(AgentBase):
             # Choose them
             if not(move_set):
                 # Otherwise, pick a virtual connection
-                move_set = self.potential_connections.keys()
+                move_set = list(self.potential_connections.keys()) if self.potential_connections.keys() else None
 
 
         # root_allowed_moves/move_set
@@ -648,6 +668,8 @@ class HexAgent(AgentBase):
         #   If we have what we need to win, root_allowed_moves = our strong connections
         #   If we still don't have what we need but we're winning, establish new connections?
 
+
+        print(move_set)
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
@@ -679,11 +701,23 @@ class HexAgent(AgentBase):
             # Create format for potential connections dictionary
             self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
 
+        # print("I reached the part of the code where we need to add to bridges")
         # Add the linked pair of bridges to current_bridges
         bridges = self.potential_connections.get(chosen_move,[])
-        if bridges:
-            self.current_bridges.get(bridges[0],[]).append(bridges[1])
-            self.current_bridges.get(bridges[1],[]).append(bridges[0])
+        # print(bridges)
+        if len(bridges) > 0:
+            # print("Checking trash",self.current_bridges.get(bridges[0],[]).append("blah"))
+            if bridges[0] in self.current_bridges.keys():
+                self.current_bridges[bridges[0]].append(bridges[1])
+            else:
+                self.current_bridges[bridges[0]] = [bridges[1]]
+
+            if bridges[1] in self.current_bridges.keys():
+                self.current_bridges[bridges[1]].append(bridges[0])
+            else:
+                self.current_bridges[bridges[1]] = [bridges[0]]
+
+
 
         # Remove the connection we just made from potential_connections
             del self.potential_connections[chosen_move]
