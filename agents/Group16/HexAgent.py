@@ -446,12 +446,12 @@ def cardinal_dirs(board, current_tile:Move):
     # b : Bridge
     # c : Strong connection
     dirs = {
-        "N" : [Move(max(x-1,0),y),Move(max(x-1,0),min(y+1,10)),Move(max(x-2,0),min(y+1,10))],
-        "NE" : [Move(max(x-1,0),min(y+1,10)),Move(x,min(y+1,10)),Move(max(x-1,0),min(y+2,10))],
-        "NW" : [Move(max(x-1,0),y),Move(x,max(y-1,0)),Move(max(x-1,0),max(y-1,0))],
-        "SE" : [Move(x,min(y+1,10)),Move(min(x+1,10),y),Move(min(x+1,10),min(y+1,10))],
-        "SW" : [Move(x,max(y-1,0)),Move(min(x+1,10),max(y-1,0)),Move(min(x+1,10),max(y-2,0))],
-        "S" : [Move(min(x+1,10),max(y-1,0)),Move(min(x+1,10),y),Move(min(x+2,10),max(y-1,0))],
+        "N" : [Move(x-1,y),Move(x-1,y+1),Move(x-2,y+1)],
+        "NE" : [Move(x-1,y+1),Move(x,y+1),Move(x-1,y+2)],
+        "NW" : [Move(x-1,y),Move(x,y-1),Move(x-1,y-1)],
+        "SE" : [Move(x,y+1),Move(x+1,y),Move(x+1,y+1)],
+        "SW" : [Move(x,y-1),Move(x+1,y-1),Move(x+1,y-2)],
+        "S" : [Move(x+1,y-1),Move(x+1,y),Move(x+2,y-1)],
         }
 
 
@@ -462,9 +462,13 @@ def cardinal_dirs(board, current_tile:Move):
     # If one tile of that triplet is illegal, disregard the entire triplet
     # Otherwise, add it to the list of possible strong connections
     for triplet in dirs.values():
-        for item in triplet:
-            if item not in legals:
-                triplet = None
+        if triplet[0] in legals:
+            if triplet[1] in legals:
+                # Thought being held
+                # Check triplet 1 and 2 for being legal
+                # We need to check if triplet[2] is a wall
+                # Make a list of what we believe or wall to be, if it's LEGAL or a wall, let him through
+                # else pass 
         if triplet:
             result.append(triplet)
 
@@ -491,41 +495,11 @@ class HexAgent(AgentBase):
 
 
     def __init__(self, colour: Colour):
-        self.adjacency_matrix = self.set_adjacency_matrix() # Initialise Adjacency matrix
+        
         self.current_bridges = {}
         self.potential_connections = {}
         super().__init__(colour)
 
-    
-    def adjacency_setup(self,current_tile: Move):
-        """
-        Calculates all adjacent tiles from a given move current_tile
-        """
-        x = current_tile.x
-        y = current_tile.y
-        
-        adjacent_moveset=[
-            current_tile,
-            Move(x, min(y+1,10)),
-            Move(min(x+1,10), max(y-1,0)),
-            Move(max(x-1,0), y),
-            Move(max(x-1,0), min(y+1,10)),
-            Move(min(x+1,10), y),
-            Move(x, max(y-1,0)),
-        ]
-        adjacent_moveset = list(set(adjacent_moveset))
-        adjacent_moveset.remove(current_tile)
-        return adjacent_moveset
-
-    def set_adjacency_matrix(self):
-        """
-        Helper function that uses adjacency_setup to set up self.adjacency_matrix
-        """
-        adj = {}
-        for i in range(11):
-            for j in range(11):
-                adj[Move(i,j)] = self.adjacency_setup(Move(i,j))
-        return adj
 
 
 
@@ -547,7 +521,7 @@ class HexAgent(AgentBase):
             board_copy.tiles[move.x][move.y].colour = self.colour
 
 
-
+        print("okay, this is what I think abt our board state",board.has_ended(self.colour))
         return board.has_ended(self.colour)
         # Return false (we dont win rn)
 
@@ -603,7 +577,7 @@ class HexAgent(AgentBase):
 
         # Check if the opponent has taken a bridge from us 
         # If so, take the capture the other untaken bridge we still have
-        # print(self.current_bridges)
+
         if self.current_bridges.get(opp_move,[]):
             # This can either be either 1, or 2  OR 3 bridges
             connected_bridges = self.current_bridges[opp_move]
@@ -615,8 +589,11 @@ class HexAgent(AgentBase):
                 #   - the opposite side from the list of bridges
                 #   - the bridge that we actually did take
                 move_set = connected_bridges
-            else: 
-                move_we_take = self.current_bridges.pop(opp_move)
+            else:
+                
+                move_we_take = self.current_bridges[opp_move]
+                for adjacent in self.current_bridges[move_we_take[0]]:
+                    del self.current_bridges[adjacent]
                 del self.current_bridges[move_we_take[0]]
                 # print("I exited through return statement 1")
                 return move_we_take[0]
@@ -638,7 +615,6 @@ class HexAgent(AgentBase):
 
         # Determine if we've already won
         if self.check_reach(board,self.current_bridges):
-
             # We've determined that we can win, and we need to reduce current_bridges
             # We need to check all values
             # If there is a value (for a key), that is not itself a key in current_bridges
