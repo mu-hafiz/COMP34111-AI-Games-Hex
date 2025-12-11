@@ -8,8 +8,6 @@ from src.AgentBase import AgentBase
 from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
-from collections import defaultdict
-
 
 def get_legal_moves(board: Board) -> list[Move]:
     """Get a list of all the empty tiles on the board."""
@@ -434,7 +432,7 @@ def mcts_search(
     return best_child.move
 
 
-def cardinal_dirs(direction,current_tile:Move):
+def cardinal_dirs(board, current_tile:Move):
     """
     Calculate all possible strong connections from a given tile
     """
@@ -455,19 +453,18 @@ def cardinal_dirs(direction,current_tile:Move):
         }
 
 
-    legals = get_legal_moves()
+    legals = get_legal_moves(board)
     result = []
 
     # For each triplet associated with a strong connection
     # If one tile of that triplet is illegal, disregard the entire triplet
     # Otherwise, add it to the list of possible strong connections
-    for direc in dirs.keys():
-        for triplet in dirs[direc]:
-            for item in triplet:
-                if item not in legals:
-                    triplet = None
-            if triplet:
-                result += triplet
+    for triplet in dirs.values():
+        for item in triplet:
+            if item not in legals:
+                triplet = None
+        if triplet:
+            result.append(triplet)
 
     return result
 
@@ -493,7 +490,7 @@ class HexAgent(AgentBase):
 
     def __init__(self, colour: Colour):
         self.adjacency_matrix = self.set_adjacency_matrix() # Initialise Adjacency matrix
-        self.current_bridges = defaultdict(False) 
+        self.current_bridges = {}
         self.potential_connections = {}
         super().__init__(colour)
 
@@ -530,24 +527,52 @@ class HexAgent(AgentBase):
 
 
 
-    def check_reach(self, board):
+    def check_reach(self, board, bridges):
         """
         Given a board, can the agent win the game if it were to play all its strong connections?
-        Returns a solution if True
-        Return False otherwise (?)
+        Returns True if we can
+        Return False otherwise
+
+
+        Eventually it would be nice to DFS this (via all of our strong connections) to find the shortest path
         """
         board_copy = clone_board(board)
         # Add strongly connected bridges to the board as if they've already been played
-        for move in self.current_bridges:
+        bridges=bridges.keys()
+        if not bridges: return False
+
+        for move in bridges:
             board_copy.tiles[move.x][move.y].colour = self.colour
 
-        # Check if we win
-        while board.has_ended(self.colour):
-            # We win
-            # Keep cutting links out the path (and their bridges) until we have the only essential path we need to reach the end
-            # Return the list of strong connections we need to win
-            return True
+
+
+        return board.has_ended(self.colour)
         # Return false (we dont win rn)
+
+    def reduce_board(self, board):
+        """
+        
+        Reduce the board
+        """
+        # Check if we win
+        smallest_so_far = self.current_bridges
+
+        for bridge in self.current_bridges.keys():
+            # This is exactly one bridge, remove it from the board
+            test_bridges = smallest_so_far
+            del test_bridges[bridge]
+            if self.check_reach(board,test_bridges):
+                smallest_so_far = test_bridges
+        
+        self.current_bridges = smallest_so_far
+
+            # We win
+            # Keep cutting bridges out the path until we have the only essential path we need to reach the end
+            # Return the list of strong connections we need to win
+            
+            
+            #
+
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """
@@ -557,6 +582,7 @@ class HexAgent(AgentBase):
         Subsequent turns: Use MCTS to select the best move.
         """
 
+        move_set = []
 
         if turn == 2:
             if should_swap(board, opp_move):
@@ -572,29 +598,48 @@ class HexAgent(AgentBase):
 
         # Check if the opponent has taken a bridge from us 
         # If so, take the capture the other untaken bridge we still have
-        if self.current_bridges[opp_move]:
-            move_we_take = self.current_bridges.pop(opp_move)
-            self.current_bridges.pop(move_we_take)
-            return move_we_take
+        if self.current_bridges.get(opp_move,[]):
+
+            # This can either be either 1, or 2  OR 3 bridges
+            connected_bridges = self.current_bridges[opp_move]
+            
+            if len(connected_bridges) > 1:
+                # Implement logic
+                # Limit MCTS to the two moves we have to choose between
+                # Whichever one we pick, remove 
+                #   - the opposite side from the list of bridges
+                #   - the bridge that we actually did take
+                move_set = connected_bridges
+            else: 
+                move_we_take = self.current_bridges.pop(opp_move)
+                del self.current_bridges[move_we_take]
+                return move_we_take
 
 
         # Determine if we've already won
-        if self.check_reach():
+        if self.check_reach(board,self.current_bridges):
+
+            # We've determined that we can win, and we need to reduce current_bridges
+            # We need to check all values
+            # If there is a value (for a key), that is not itself a key in current_bridges
+            # Remove that value from the list of values for the key
+            self.reduce_board()
             # To implement
-            pass
+            move_set = self.current_bridges
 
             
-        # Refactoring root_allowed_moves from a ternary operator to a if statement
-        # Old: move_set (A.K.A root_allowed_moves) = get_fair_first_moves(board) if turn == 1 else self.potential_connections.keys()
-        move_set = []
+
         # If it's the first turn
         if turn == 1:
             # Pick a "fair" move
             move_set = get_fair_first_moves(board)
         else:
-            # Otherwise, pick a virtual connection
-            move_set = self.potential_connections.keys()
-    
+            # If we have decided on moves already
+            # Choose them
+            if not(move_set):
+                # Otherwise, pick a virtual connection
+                move_set = self.potential_connections.keys()
+
 
         # root_allowed_moves/move_set
         # The set of moves that we will allow MCTS to access for the purpose of simulating victories.
@@ -629,18 +674,19 @@ class HexAgent(AgentBase):
 
 
         # Add the new potential triplets to the potential connections
-        potential_triplets = cardinal_dirs(chosen_move)
+        potential_triplets = cardinal_dirs(board,chosen_move) 
         for triplet in potential_triplets:
             # Create format for potential connections dictionary
             self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
 
         # Add the linked pair of bridges to current_bridges
-        bridges = self.potential_connections[chosen_move]
-        self.current_bridges[bridges[0]] = bridges[1]
-        self.current_bridges[bridges[1]] = bridges[0]
+        bridges = self.potential_connections.get(chosen_move,[])
+        if bridges:
+            self.current_bridges.get(bridges[0],[]).append(bridges[1])
+            self.current_bridges.get(bridges[1],[]).append(bridges[0])
 
         # Remove the connection we just made from potential_connections
-        del self.potential_connections[chosen_move]
+            del self.potential_connections[chosen_move]
 
         return chosen_move
 
