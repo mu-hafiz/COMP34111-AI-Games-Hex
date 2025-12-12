@@ -366,8 +366,8 @@ def mcts_search(
         # No children (e.g. board full / very tiny time budget) – just play random legal move
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
-    print()
     # Optionally prepare and print top-k rankings
+    report_top_k = None
     if report_top_k is not None and report_top_k > 0 and root.children:
         # compute stats for each child
         def child_stats(child: MCTSNode):
@@ -462,10 +462,20 @@ class HexAgent(AgentBase):
 
     def __init__(self, colour: Colour):
         self.walls = []
-        self.setup_walls(colour)
         self.current_bridges = {}
         self.potential_connections = {}
+        self.setup_walls(colour)
         super().__init__(colour)
+
+    def setup_wall_connections(self,colour):
+        if colour == colour.RED:
+            for i in range(10):
+                self.potential_connections[Move(1,i)] = [Move(0,i),Move(0,i+1)]
+                self.potential_connections[Move(9,i+1)] = [Move(10,i-1),Move(10,i)]
+        if colour == colour.BLUE:
+            for i in range(10):
+                self.potential_connections[Move(i,1)] = [Move(i,1),Move(i+1,0)]
+                self.potential_connections[Move(i+1,9)] = [Move(i-1,10),Move(i,10)]
 
     def setup_walls(self,colour):
         wall_list = []
@@ -478,6 +488,9 @@ class HexAgent(AgentBase):
                 wall_list.append(Move(i,-1))
                 wall_list.append(Move(i,11))
         self.walls = wall_list
+
+
+        self.setup_wall_connections(colour)
 
     def check_reach(self, board, bridges):
         """
@@ -524,8 +537,16 @@ class HexAgent(AgentBase):
             if triplet[-1] not in self.walls:
                 self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
             else:
-                self.current_bridges[triplet[1]] = [triplet[0]]
-                self.current_bridges[triplet[0]] = [triplet[1]]
+                if triplet[0] in self.current_bridges.keys():
+                    self.current_bridges[triplet[0]].append(triplet[1])
+                else:
+                    self.current_bridges[triplet[0]] = [triplet[1]]
+                if triplet[1] in self.current_bridges.keys():
+                    self.current_bridges[triplet[1]].append(triplet[0])
+                else:
+                    self.current_bridges[triplet[1]] = [triplet[0]]
+                    
+
         # print("I reached the part of the code where we need to add to bridges")
         # Add the linked pair of bridges to current_bridges
         bridges = self.potential_connections.get(chosen_move,[])
@@ -585,7 +606,7 @@ class HexAgent(AgentBase):
 
         # This can be slightly optimised by rather than taking temp as an empty list
         # We can initialise it as smallest_so_far already
-        print("This is before we've doubly linked",smallest_so_far)
+        # print("This is before we've doubly linked",smallest_so_far)
 
 
         temp_inverted_list = smallest_so_far.copy()
@@ -606,7 +627,7 @@ class HexAgent(AgentBase):
 
 
 
-        print("And this is after",temp_inverted_list)
+        # print("And this is after",temp_inverted_list)
         self.current_bridges = temp_inverted_list.copy()
 
 
@@ -650,8 +671,8 @@ class HexAgent(AgentBase):
         # print(temp_inverted_list)
         if temp_inverted_list.get(opp_move,[]):
             for connection in temp_inverted_list[opp_move]:
-                print("HE TOOK OUR BRIDGE")
-                print("We're going to prune",self.potential_connections[connection])
+                # print("HE TOOK OUR BRIDGE")
+                # print("We're going to prune",self.potential_connections[connection])
                 del self.potential_connections[connection]
 
 
@@ -662,27 +683,28 @@ class HexAgent(AgentBase):
         Turn 2: Decide whether to swap based on opponent's first move.
         Subsequent turns: Use MCTS to select the best move.
         """
-
+        
+        self.reinstate_links()
+        """
         print("I think I'm ",self.colour)
-        print("I think these are my potential connections",self.potential_connections)
         print("I think these are my current bridges",self.current_bridges)
-
-
+        print("I think my walls",self.walls)
+        """
         move_set = []
 
         if turn == 2:
-            if should_swap(board, opp_move) or True:
+            if should_swap(board, opp_move):
                 self.potential_connections = {}
                 self.current_bridges = {}
-                self.colour = Colour.opposite(self.colour)
-                self.setup_walls(self.colour)
+                self.setup_walls(Colour.opposite(self.colour))
+                self.establish_connection(board,opp_move)
                 return Move(-1, -1)
 
         if opp_move == Move(-1,-1):
             self.potential_connections = {}
             self.current_bridges = {}
-            self.colour = Colour.opposite(self.colour)
             self.setup_walls(self.colour)
+        # print("I think these are my potential connections",self.potential_connections)
 
         """
         This section is for determining what the goal of the Agent should be
@@ -719,6 +741,8 @@ class HexAgent(AgentBase):
                 # And also remove their adjacent bridges
                 # Explicitly do MCTS here in this case
 
+                # i think the error is in here
+                # we picked a move out of defense, prune the rest of the 3
                 for unchosen_move in move_set:
                     for adjacent in self.current_bridges[unchosen_move]:
                         del self.current_bridges[adjacent]
@@ -734,10 +758,9 @@ class HexAgent(AgentBase):
                 for adjacent in self.current_bridges[move_we_take[0]]:
                     if adjacent in self.current_bridges.keys():
                         del self.current_bridges[adjacent]
-                del self.current_bridges[move_we_take[0]]
                 self.reinstate_links()
+                del self.current_bridges[move_we_take[0]]
                 # print("I exited through return statement 1")
-                print("I am defending myself")
                 self.remove_taken_potential_connection(opp_move)
                 self.establish_connection(board,move_we_take[0])
 
@@ -783,12 +806,12 @@ class HexAgent(AgentBase):
         #   If we still don't have what we need but we're winning, establish new connections?
 
 
-        print(move_set)
+        # print(move_set)
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
             max_iterations=5000,          # max number of random plays
-            max_time_seconds=0.5,           # time limit per move
+            max_time_seconds=0.8,           # time limit per move !!!WARNING!!! THIS BREAKS WHEN YOU MAKE IT BELOW A CERTAIN THRESHOLD (~0.5)
             report_top_k=5,               # show top-5 for normal turns
             root_allowed_moves=move_set
         )
@@ -813,12 +836,17 @@ class HexAgent(AgentBase):
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
 
 # To run the analysis over 100 games (this took 2-3 hours for me):
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "Group16" -a -g 50
 
 
 
 """
 Todo list
-1. We need to treat t he points - 2 away from the wall - as potential connections
-2. Red keeps making a fuckass move blue does not swap him, on move
+1. If blue chooses not to swap, it's always going to end up playing a move that is right next to a wall, which is not a good starting move
+     It needs to be encouraged to play something more centrally or else it will be at a disadvantage
+     So we need to broaden the list of moves that it looks at after its 1st moves
+     I.e. add - to its potential connections - a list of good moves to its list of potential connections/move_set 
+     So that it considers it for MCTS
+2. Fix weird error
+3. Improve analysis to check for errors
 """
