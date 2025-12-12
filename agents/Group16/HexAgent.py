@@ -261,39 +261,6 @@ def parallelised_rollouts(child_board: Board, child_player: Colour, my_col: Colo
 
 
 
-def connection_points(move: Move):
-    x = move.x
-    y = move.y
-
-    return [(Move(x-1, y-1),"NW"), (Move(x-2, y+1),"N"), (Move(x-1, y+2),"NE"), (Move(x+1, y+1),"SE"), (Move(x+2, y-1),"S"), (Move(x+1, y-2),"SW")]
-
-
-
-def find_virtual_connections(board: Board,player_to_move: Colour):
-
-    """
-    Checking each of these cells
-    virtual connections:
-        x-1, y-1
-        x-2, y+1
-        x-1, y+2
-        x+1, y+1
-        x+2, y-1
-        x+1, y-2
-    """
-
-    avail_moves = get_legal_moves(board)
-    colour_moves = get_colour_moves(board, player_to_move)
-
-
-    for move in colour_moves:
-        for potential_move in connection_points(move):
-            if potential_move in avail_moves:         
-                continue
-
-    return
-
-
 
 
 def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
@@ -378,6 +345,7 @@ def mcts_search(
             # If the node we picked wins in one move, play it
             if node.is_terminal(): 
                 instant_victory = move
+                return move
 
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
             rollout_results = [
@@ -392,8 +360,6 @@ def mcts_search(
                 while node is not None:
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
-            if instant_victory:
-                return move
 
     # After search: pick child with the most visits
     if not root.children:
@@ -434,7 +400,7 @@ def mcts_search(
     return best_child.move
 
 
-def cardinal_dirs(board, current_tile:Move):
+def cardinal_dirs(board, current_tile:Move, walls):
     """
     Calculate all possible strong connections from a given tile
     """
@@ -469,8 +435,9 @@ def cardinal_dirs(board, current_tile:Move):
                 # We need to check if triplet[2] is a wall
                 # Make a list of what we believe or wall to be, if it's LEGAL or a wall, let him through
                 # else pass 
-        if triplet:
-            result.append(triplet)
+                if (triplet[2] in legals) or (triplet[2] in walls):
+                    result.append(triplet)
+
 
     return result
 
@@ -487,7 +454,6 @@ class HexAgent(AgentBase):
         Given a tile (Move), returns adjacent tiles in a list (List[Move])
     defaultdict(False) current_bridges: Key is a tile, Returned value is a tile, Default value is False (None doesn't work)
         Given a tile (Move), if that tile is a bridge, return the other bridge it's corresponding bridge (Move), otherwise return False
-        what if it belongs to more than one strong connection????
     Dictionary potential_connections: 
         Given a tile (Move) which is a strong connection, return the bridges it is dependent on 
     ---
@@ -495,13 +461,23 @@ class HexAgent(AgentBase):
 
 
     def __init__(self, colour: Colour):
-        
+        self.walls = []
+        self.setup_walls(colour)
         self.current_bridges = {}
         self.potential_connections = {}
         super().__init__(colour)
 
-
-
+    def setup_walls(self,colour):
+        wall_list = []
+        if colour == colour.RED:
+            for i in range(11):
+                wall_list.append(Move(-1,i))
+                wall_list.append(Move(11,i))
+        if colour == colour.BLUE:
+            for i in range(11):
+                wall_list.append(Move(i,-1))
+                wall_list.append(Move(i,11))
+        self.walls = wall_list
 
     def check_reach(self, board, bridges):
         """
@@ -521,9 +497,61 @@ class HexAgent(AgentBase):
             board_copy.tiles[move.x][move.y].colour = self.colour
 
 
-        print("okay, this is what I think abt our board state",board.has_ended(self.colour))
-        return board.has_ended(self.colour)
+        # print("okay, this is what I think abt our board state",board_copy.has_ended(self.colour))
+        return board_copy.has_ended(self.colour)
         # Return false (we dont win rn)
+
+    def establish_connection(self, board, chosen_move):
+
+
+        """
+        After this point, we will have chosen a move to play.
+        Update the following:
+            self.potential_connections
+                - Our move must have already existed in potential connections (i feel like this is wrong but we'll cross that bridge when we get to it)
+                - It's no longer potential, as we are now playing this move
+                - So remove it from our dictionary of potential connections
+            current_bridges
+                - Adding a new strong connection inherently must come with bridges
+                - Add those to our current bridges
+        """
+
+        # Add the new potential triplets to the potential connections
+        potential_triplets = cardinal_dirs(board,chosen_move,self.walls)
+        # print("Walls are",self.walls)
+        for triplet in potential_triplets:
+            # Create format for potential connections dictionary
+            if triplet[-1] not in self.walls:
+                self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
+            else:
+                self.current_bridges[triplet[1]] = [triplet[0]]
+                self.current_bridges[triplet[0]] = [triplet[1]]
+        # print("I reached the part of the code where we need to add to bridges")
+        # Add the linked pair of bridges to current_bridges
+        bridges = self.potential_connections.get(chosen_move,[])
+        # print(bridges)
+        if len(bridges) > 0:
+            # print("Checking trash",self.current_bridges.get(bridges[0],[]).append("blah"))
+            if bridges[0] in self.current_bridges.keys():
+                self.current_bridges[bridges[0]].append(bridges[1])
+            else:
+                self.current_bridges[bridges[0]] = [bridges[1]]
+
+            if bridges[1] in self.current_bridges.keys():
+                self.current_bridges[bridges[1]].append(bridges[0])
+            else:
+                self.current_bridges[bridges[1]] = [bridges[0]]
+
+
+
+        # Remove the connection we just made from potential_connections
+            del self.potential_connections[chosen_move]
+
+        if chosen_move in self.current_bridges.keys():
+            for bridge in self.current_bridges[chosen_move]:
+                del self.current_bridges[bridge]
+            del self.current_bridges[chosen_move]
+
 
     def reduce_board(self, board):
         """
@@ -531,16 +559,57 @@ class HexAgent(AgentBase):
         Reduce the board
         """
         # Check if we win
-        smallest_so_far = self.current_bridges
+        smallest_so_far = self.current_bridges.copy()
 
         for bridge in self.current_bridges.keys():
             # This is exactly one bridge, remove it from the board
-            test_bridges = smallest_so_far
+            #print("This is the smallest set we need",smallest_so_far)
+            test_bridges = smallest_so_far.copy()
             del test_bridges[bridge]
             if self.check_reach(board,test_bridges):
-                smallest_so_far = test_bridges
+                smallest_so_far = test_bridges.copy()
+
+
+
+        # What we're doing is looking at the set of current bridges that we've determined, is the smallest set of bridges we need
+        # So that we can win the game
+        # However, in this process we sometimes lose the other side of strong connections of the bridges 
+        # As a result, we do the following
+        # 1. Take an empty dict, temp
+        # 2. Go through each key in smallest_so_far
+        # 3. If it exists in temp, then append the original values of that key (in smallest_so_far) to temp
+        # 4. Otherwise, plainly set it to the original values
+        # 5. Now, for each key that value that we have
+        # 6. Doubly link it back onto it's key
+        # 7. In the case where the value already exists as a key, append it instead, otherwise just set it
+
+        # This can be slightly optimised by rather than taking temp as an empty list
+        # We can initialise it as smallest_so_far already
+        print("This is before we've doubly linked",smallest_so_far)
+
+
+        temp_inverted_list = smallest_so_far.copy()
+        for key in smallest_so_far.keys():
+            # Grab the values, could be a list
+            values = smallest_so_far[key]
+            for move in values:
+                # Does this move exist inside temp_inverted_list?
+                if move in temp_inverted_list.keys():
+                     # Only add the move if it doesn't already exist
+                    if key not in temp_inverted_list[move]:
+                        temp_inverted_list[move].append(key)
+                else:
+                    temp_inverted_list[move] = [key]
         
-        self.current_bridges = smallest_so_far
+
+
+
+
+
+        print("And this is after",temp_inverted_list)
+        self.current_bridges = temp_inverted_list.copy()
+
+
 
             # We win
             # Keep cutting bridges out the path until we have the only essential path we need to reach the end
@@ -548,6 +617,42 @@ class HexAgent(AgentBase):
             
             
             #
+
+
+    def reinstate_links(self):
+
+        temp_inverted_list = self.current_bridges.copy()
+        for key in self.current_bridges.keys():
+            # Grab the values, could be a list
+            values = self.current_bridges[key]
+            for move in values:
+                # Does this move exist inside temp_inverted_list?
+                if move in temp_inverted_list.keys():
+                    # Only add the move if it doesn't already exist
+                    if key not in temp_inverted_list[move]:
+                        temp_inverted_list[move].append(key)
+                else:
+                    temp_inverted_list[move] = [key]
+        
+
+        self.current_bridges = temp_inverted_list
+
+    def remove_taken_potential_connection(self,opp_move):
+        temp_inverted_list = {}
+        for pot_con in list(self.potential_connections.keys()):
+            for bridge in self.potential_connections[pot_con]:
+                if bridge in temp_inverted_list.keys():
+                    temp_inverted_list[bridge].append(pot_con)
+                else:
+                    temp_inverted_list[bridge] = [pot_con]
+
+        # print("this is truly disgusting")
+        # print(temp_inverted_list)
+        if temp_inverted_list.get(opp_move,[]):
+            for connection in temp_inverted_list[opp_move]:
+                print("HE TOOK OUR BRIDGE")
+                print("We're going to prune",self.potential_connections[connection])
+                del self.potential_connections[connection]
 
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
@@ -558,15 +663,26 @@ class HexAgent(AgentBase):
         Subsequent turns: Use MCTS to select the best move.
         """
 
+        print("I think I'm ",self.colour)
+        print("I think these are my potential connections",self.potential_connections)
+        print("I think these are my current bridges",self.current_bridges)
+
+
         move_set = []
 
         if turn == 2:
-            if should_swap(board, opp_move):
+            if should_swap(board, opp_move) or True:
+                self.potential_connections = {}
+                self.current_bridges = {}
+                self.colour = Colour.opposite(self.colour)
+                self.setup_walls(self.colour)
                 return Move(-1, -1)
 
         if opp_move == Move(-1,-1):
             self.potential_connections = {}
             self.current_bridges = {}
+            self.colour = Colour.opposite(self.colour)
+            self.setup_walls(self.colour)
 
         """
         This section is for determining what the goal of the Agent should be
@@ -589,29 +705,44 @@ class HexAgent(AgentBase):
                 #   - the opposite side from the list of bridges
                 #   - the bridge that we actually did take
                 move_set = connected_bridges
+                chosen_move = mcts_search(
+                    root_board=board,
+                    my_colour=self.colour,
+                    max_iterations=5000,          # max number of random plays
+                    max_time_seconds=0.5,           # time limit per move
+                    report_top_k=5,               # show top-5 for normal turns
+                    root_allowed_moves=move_set
+                )
+
+                # We now know our chosen move,
+                # Remove our chosen move from moveset
+                # And also remove their adjacent bridges
+                # Explicitly do MCTS here in this case
+
+                for unchosen_move in move_set:
+                    for adjacent in self.current_bridges[unchosen_move]:
+                        del self.current_bridges[adjacent]
+                self.reinstate_links()
+                self.remove_taken_potential_connection(opp_move)
+                self.establish_connection(board,chosen_move)
+
+                return chosen_move
+
             else:
                 
                 move_we_take = self.current_bridges[opp_move]
                 for adjacent in self.current_bridges[move_we_take[0]]:
-                    del self.current_bridges[adjacent]
+                    if adjacent in self.current_bridges.keys():
+                        del self.current_bridges[adjacent]
                 del self.current_bridges[move_we_take[0]]
+                self.reinstate_links()
                 # print("I exited through return statement 1")
+                print("I am defending myself")
+                self.remove_taken_potential_connection(opp_move)
+                self.establish_connection(board,move_we_take[0])
+
                 return move_we_take[0]
 
-        if self.potential_connections.get(opp_move,[]):
-            # The enemy took a pot con
-            del self.potential_connections[opp_move]
-
-        temp_inverted_list = {}
-        for pot_con in list(self.potential_connections.keys()):
-            for bridge in self.potential_connections[pot_con]:
-                temp_inverted_list[bridge] = pot_con
-
-        # print("this is disgusting")
-        # print(temp_inverted_list)
-        if temp_inverted_list.get(opp_move,[]):
-            # print("HE TOOK OUR BRIDGE")
-            del self.potential_connections[temp_inverted_list[opp_move]]
 
         # Determine if we've already won
         if self.check_reach(board,self.current_bridges):
@@ -619,11 +750,18 @@ class HexAgent(AgentBase):
             # We need to check all values
             # If there is a value (for a key), that is not itself a key in current_bridges
             # Remove that value from the list of values for the key
-            self.reduce_board()
+            self.reduce_board(board)
             # To implement
-            move_set = self.current_bridges
+            move_set = list(self.current_bridges.keys())
 
-            
+        if self.potential_connections.get(opp_move,[]):
+            # The enemy took a pot con
+            del self.potential_connections[opp_move]
+
+
+
+        self.remove_taken_potential_connection(opp_move)
+
 
         # If it's the first turn
         if turn == 1:
@@ -650,7 +788,7 @@ class HexAgent(AgentBase):
             root_board=board,
             my_colour=self.colour,
             max_iterations=5000,          # max number of random plays
-            max_time_seconds=2,           # time limit per move
+            max_time_seconds=0.5,           # time limit per move
             report_top_k=5,               # show top-5 for normal turns
             root_allowed_moves=move_set
         )
@@ -658,45 +796,9 @@ class HexAgent(AgentBase):
 
 
 
-        """
-        After this point, we will have chosen a move to play.
-        Update the following:
-            self.potential_connections
-                - Our move must have already existed in potential connections (i feel like this is wrong but we'll cross that bridge when we get to it)
-                - It's no longer potential, as we are now playing this move
-                - So remove it from our dictionary of potential connections
-            current_bridges
-                - Adding a new strong connection inherently must come with bridges
-                - Add those to our current bridges
-        """
 
+        self.establish_connection(board,chosen_move)
 
-        # Add the new potential triplets to the potential connections
-        potential_triplets = cardinal_dirs(board,chosen_move) 
-        for triplet in potential_triplets:
-            # Create format for potential connections dictionary
-            self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
-
-        # print("I reached the part of the code where we need to add to bridges")
-        # Add the linked pair of bridges to current_bridges
-        bridges = self.potential_connections.get(chosen_move,[])
-        # print(bridges)
-        if len(bridges) > 0:
-            # print("Checking trash",self.current_bridges.get(bridges[0],[]).append("blah"))
-            if bridges[0] in self.current_bridges.keys():
-                self.current_bridges[bridges[0]].append(bridges[1])
-            else:
-                self.current_bridges[bridges[0]] = [bridges[1]]
-
-            if bridges[1] in self.current_bridges.keys():
-                self.current_bridges[bridges[1]].append(bridges[0])
-            else:
-                self.current_bridges[bridges[1]] = [bridges[0]]
-
-
-
-        # Remove the connection we just made from potential_connections
-            del self.potential_connections[chosen_move]
 
         return chosen_move
 
@@ -712,3 +814,11 @@ class HexAgent(AgentBase):
 
 # To run the analysis over 100 games (this took 2-3 hours for me):
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
+
+
+
+"""
+Todo list
+1. We need to treat t he points - 2 away from the wall - as potential connections
+2. Red keeps making a fuckass move blue does not swap him, on move
+"""
