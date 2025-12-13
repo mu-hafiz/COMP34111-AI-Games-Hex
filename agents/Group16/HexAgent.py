@@ -838,6 +838,8 @@ class HexAgent(AgentBase):
 # To run the analysis over 100 games (this took 2-3 hours for me):
 # python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "Group16" -a -g 50
 
+# To play the agent against a human:
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
 
 
 """
