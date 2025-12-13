@@ -44,13 +44,11 @@ class HumanPlayer(AgentBase):
         Returns:
             Move: The human player's move
         """ 
-        try:
-            user_input = input("Enter your move (format: x, y): ")
-            x_str, y_str = user_input.strip().split(",")
-            x, y = int(x_str), int(y_str)
-            if (x, y) in self._choices:
+        while True:
+            try:
+                user_input = input("Enter your move (format: x, y): ")
+                x_str, y_str = user_input.strip().split(",")
+                x, y = int(x_str), int(y_str)
                 return Move(x, y)
-            else:
-                print("Invalid move. Please try again.")
-        except ValueError:
-            print("Invalid input format. Please enter two integers separated by a space.")
+            except ValueError:
+                print("Invalid input format. Please enter two integers separated by a space.")
