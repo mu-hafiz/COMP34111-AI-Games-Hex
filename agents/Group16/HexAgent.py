@@ -436,23 +436,30 @@ class HexAgent(AgentBase):
         # Strong connection : List of Bridges
         self.potential_connections = {}
         self.setup_walls(colour)
+        self.setup_wall_connections(colour, opp_move=None)
         super().__init__(colour)
 
 
     
-    def setup_wall_connections(self,colour):
+    def setup_wall_connections(self,colour,opp_move):
         """
         Takes a colour
         Sets the player's potential connections to the wall based on that colour
         """
+
+        
+
         if colour == colour.RED:
             for i in range(10):
-                self.potential_connections[Move(1,i)] = [Move(0,i),Move(0,i+1)]
-                self.potential_connections[Move(9,i+1)] = [Move(10,i-1),Move(10,i)]
+                self.potential_connections[Move(1,i)] = [(Move(0,i),Move(0,i+1))]
+                self.potential_connections[Move(9,i+1)] = [(Move(10,i),Move(10,i+1))]
         if colour == colour.BLUE:
             for i in range(10):
-                self.potential_connections[Move(i,1)] = [Move(i,1),Move(i+1,0)]
-                self.potential_connections[Move(i+1,9)] = [Move(i-1,10),Move(i,10)]
+                self.potential_connections[Move(i,1)] = [(Move(i,0),Move(i+1,0))]
+                self.potential_connections[Move(i+1,9)] = [(Move(i,10),Move(i+1,10))]
+        
+        if opp_move in self.potential_connections.keys():
+            del self.potential_connections[opp_move]
 
     def setup_walls(self,colour):
         """
@@ -471,7 +478,6 @@ class HexAgent(AgentBase):
         self.walls = wall_list
 
 
-        self.setup_wall_connections(colour)
 
     def check_reach(self, board, bridges):
         """
@@ -535,42 +541,22 @@ class HexAgent(AgentBase):
         for triplet in potential_triplets:
             # Create format for potential connections dictionary
             if triplet[-1] not in self.walls:
-                self.potential_connections[triplet[-1]] = (triplet[0],triplet[1])
+                if triplet[-1] in self.potential_connections.keys():
+                    self.potential_connections[triplet[-1]].append((triplet[0],triplet[1]))
+                else:
+                    self.potential_connections[triplet[-1]] = [(triplet[0],triplet[1])]
             else:
                 self.Doubly_Link_Bridge(triplet[0],triplet[1])
-
-                """
-                if triplet[0] in self.current_bridges.keys():
-                    self.current_bridges[triplet[0]].append(triplet[1])
-                else:
-                    self.current_bridges[triplet[0]] = [triplet[1]]
-                if triplet[1] in self.current_bridges.keys():
-                    self.current_bridges[triplet[1]].append(triplet[0])
-                else:
-                    self.current_bridges[triplet[1]] = [triplet[0]]
-                """ 
 
 
         bridges = self.potential_connections.get(chosen_move,[])
         if len(bridges) > 0:
-            self.Doubly_Link_Bridge(bridges[0],bridges[1])
-            """
-            
-            if bridges[0] in self.current_bridges.keys():
-                self.current_bridges[bridges[0]].append(bridges[1])
-            else:
-                self.current_bridges[bridges[0]] = [bridges[1]]
-
-            if bridges[1] in self.current_bridges.keys():
-                self.current_bridges[bridges[1]].append(bridges[0])
-            else:
-                self.current_bridges[bridges[1]] = [bridges[0]]
-            """
-
-
+            for set_of_bridges in bridges:
+                self.Doubly_Link_Bridge(set_of_bridges[0],set_of_bridges[1])
         # Remove the connection we just made from potential_connections
             del self.potential_connections[chosen_move]
 
+        self.reinstate_links()
         if chosen_move in self.current_bridges.keys():
             for bridge in self.current_bridges[chosen_move]:
                 # NOTICE!!!
@@ -581,7 +567,10 @@ class HexAgent(AgentBase):
                 # Then we are pruning the fact that the node 1 tile away
                 # May be a strong connection to the node 2 tiles away
                 # We should do self.current_bridges[bridge].remove(chosen_move) instead 
-                del self.current_bridges[bridge]
+                if len(self.current_bridges[bridge]) > 1:
+                    self.current_bridges[bridge].remove(chosen_move)
+                else:
+                    del self.current_bridges[bridge]
             del self.current_bridges[chosen_move]
 
 
@@ -618,9 +607,6 @@ class HexAgent(AgentBase):
 
         # print("This is before we've doubly linked",smallest_so_far)
 
-        # NOTICE!!!!
-        # This function is just self.reinstate_links()
-        # We can just call that instead
 
         temp_inverted_list = smallest_so_far.copy()
         for key in smallest_so_far.keys():
@@ -676,13 +662,18 @@ class HexAgent(AgentBase):
         temp_inverted_list = {}
         for pot_con in list(self.potential_connections.keys()):
             for bridge in self.potential_connections[pot_con]:
-                if bridge in temp_inverted_list.keys():
-                    temp_inverted_list[bridge].append(pot_con)
-                else:
-                    temp_inverted_list[bridge] = [pot_con]
+                temp_inverted_list[bridge] = pot_con
 
-        if temp_inverted_list.get(opp_move,[]):
-            for connection in temp_inverted_list[opp_move]:
+
+        for pairs in temp_inverted_list.keys():
+            if opp_move in pairs:
+                if len(self.potential_connections[temp_inverted_list[pairs]]) > 1:
+                    self.potential_connections[temp_inverted_list[pairs]].remove(pairs)
+                else:
+                    del self.potential_connections[temp_inverted_list[pairs]]
+
+
+            
                 # print("HE TOOK OUR BRIDGE")
                 # print("We're going to prune",self.potential_connections[connection])
 
@@ -692,7 +683,7 @@ class HexAgent(AgentBase):
                 # That doesn't mean we have lost the potential connection as a whole
                 # We should instead remove the link from that bridge to the potential connection
                 # self.potential_connection[connection].remove(opp_move)
-                del self.potential_connections[connection]
+                
         
         # Okay, I'm like 90% sure that at this point at the code right here
         # We should call a function called remove_dependent_bridges
@@ -749,6 +740,7 @@ class HexAgent(AgentBase):
                 self.current_bridges = {}
                 # Set up our walls to be their walls (double check this works as intended)
                 self.setup_walls(Colour.opposite(self.colour)) 
+                self.setup_wall_connections(Colour.opposite(self.colour),opp_move)
                 # Take the potential connections that their move would have given them
                 self.establish_connection(board,opp_move)
                 return Move(-1, -1)
@@ -761,6 +753,7 @@ class HexAgent(AgentBase):
             self.current_bridges = {}
             # Re-establish our walls
             self.setup_walls(self.colour)
+            self.setup_wall_connections(self.colour,opp_move)
 
 
         # print("I think these are my potential connections",self.potential_connections)
@@ -774,8 +767,9 @@ class HexAgent(AgentBase):
         if self.current_bridges.get(opp_move,[]):
             # This can either be either 1, or 2  OR 3 bridges
             connected_bridges = self.current_bridges[opp_move]
-            
+            print(connected_bridges)
             if len(connected_bridges) > 1:
+                print("I ran in case A")
                 # Limit MCTS to the two moves we have to choose between
                 # Whichever one we pick, remove 
                 #   - the opposite side from the list of bridges
@@ -803,28 +797,40 @@ class HexAgent(AgentBase):
                         # For the reasons listed above
                         # I think (I AM NOT SURE) this should be
                         # self.current_bridges[adjacent].remove(opp_move)
-                        del self.current_bridges[adjacent]
+                        if len(self.current_bridges[adjacent]) > 1:
+                            self.current_bridges[adjacent].remove(opp_move)
+                        else:
+                            del self.current_bridges[adjacent]
+
+
+                self.establish_connection(board,chosen_move)
+                if opp_move in self.current_bridges.keys():
+                    del self.current_bridges[opp_move]
                 self.reinstate_links()
                 self.remove_taken_potential_connection(opp_move)
-                self.establish_connection(board,chosen_move)
-
                 return chosen_move
 
             else:
+                print("I ran in case B")
                 move_we_take = self.current_bridges[opp_move]
-                for adjacent in self.current_bridges[move_we_take[0]]:
+                for adjacent in self.current_bridges[opp_move]:
                     if adjacent in self.current_bridges.keys():
                         # NOTICE!!!
                         # For the reasons listed above
                         # I think (I AM NOT SURE) this should be
-                        # self.current_bridges[adjacent].remove(opp_move)
-                        del self.current_bridges[adjacent]
+                        if len(self.current_bridges[adjacent]) > 1:
+                            self.current_bridges[adjacent].remove(opp_move)
+                        else:
+                            del self.current_bridges[adjacent]
+                        #del self.current_bridges[adjacent]
+                
+
+                self.establish_connection(board,move_we_take[0])
+                if opp_move in self.current_bridges.keys():
+                    del self.current_bridges[opp_move]
                 self.reinstate_links()
-                del self.current_bridges[move_we_take[0]]
                 # print("I exited through return statement 1")
                 self.remove_taken_potential_connection(opp_move)
-                self.establish_connection(board,move_we_take[0])
-
                 return move_we_take[0]
 
 
