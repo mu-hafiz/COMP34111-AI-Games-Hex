@@ -100,6 +100,7 @@ if __name__ == "__main__":
 
         turnsPerGame = []
 
+        error_rate = 0
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
             print(f"GAME {game+1}:")
@@ -116,8 +117,11 @@ if __name__ == "__main__":
                 logDest=args.log,
                 verbose=args.verbose,
             )
-            g.run()
-
+            try:
+                g.run()
+            except:
+                error_rate += 1
+                continue
             winner = g.players[g.current_player].name
             turns = g.turn
 
@@ -129,6 +133,7 @@ if __name__ == "__main__":
         print("-----------------------------------------------------------------------------")
         print("FINAL RESULTS:\n")
         print(f"Total Games: {args.games}")
+        print(f"Finished games: {args.games-error_rate}")
         print(f"Turns Per Game: {turnsPerGame}")
         print(f"Average turns per game: {sum(turnsPerGame) / args.games}\n")
 
