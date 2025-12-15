@@ -85,7 +85,7 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections")
-    if len(information_set["Lost Bridges"]) != 0:
+    if len(information_set["Lost Bridges"]) != 0 and information_set["Turn"] != 3:
         # The enemy has threatened a strong connection of ours
         list_of_decisions.append("Defend")
     if check_reach(information_set["Colour"], information_set["Board"], information_set["Bridges"]):
@@ -114,7 +114,7 @@ def execution_flow(old_current_bridges,turn,colour,board,opp_move):
 
     # Generate our current information
     new_current_bridges = generate_current_bridges(colour,board)
-
+    print(new_current_bridges)
     # Using our new current bridges and our old current bridges
     # Check what's different
     bridges_lost = compare_previous_board_state(old_current_bridges,new_current_bridges)
@@ -309,7 +309,7 @@ def generate_current_bridges(colour, board,chosen_move = None):
     # For each tile
     for tile in our_tiles:
         current_bridges += cardinal_dirs(tile,wall_list,colour,board)
-    print(wall_list)
+    # print(wall_list)
     return list(set(current_bridges))
 
 
@@ -319,8 +319,8 @@ def compare_previous_board_state(old_current_bridges,new_current_bridges):
     Should return a list of the pairs that are different
     i.e. has the enemy taken a bridge from us
     """
-    print("Old",old_current_bridges)
-    print("New",new_current_bridges)
+    # print("Old",old_current_bridges)
+    # print("New",new_current_bridges)
 
     return list(set(old_current_bridges).difference(set(new_current_bridges)))
     
@@ -738,7 +738,6 @@ class RefactoredHexAgent(AgentBase):
 
     def __init__(self, colour: Colour):
         self.walls = []
-        self.setup_walls(colour)
 
         # Old: Move : List[Move]
         # New: List(Tuple(Move,Move))
@@ -779,7 +778,7 @@ class RefactoredHexAgent(AgentBase):
 # Red
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
 # Blue
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2Name "agents.Group16.RefactoredHexAgent RefactoredHexAgent"
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "G16"
 
 # Agent VS Agent
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "G16Player2"
