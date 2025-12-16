@@ -67,7 +67,7 @@ class Game:
         logDest: str | TextIO = sys.stderr,
         verbose: bool = False,
         silent: bool = False,
-        stats: list = [0,0,0,0,0]
+        stats: list = [0,0]
     ):
         self._turn = 0  # current turn count
         self._board = Board(board_size)

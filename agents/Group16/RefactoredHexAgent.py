@@ -100,6 +100,7 @@ def identify_decision(information_set):
 
     list_of_decisions = sorted(list_of_decisions,key = lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
+    print(list_of_decisions)
     return list_of_decisions
 
 def execution_flow(old_current_bridges,turn,colour,board,opp_move):
@@ -587,12 +588,11 @@ def mcts_search(
     )
 
      # If a restricted candidate list is provided, limit/expand the root to only those moves.
-    if root_allowed_moves is not None:
+    if root_allowed_moves:
         # keep only allowed moves in root.untried_moves
         root.untried_moves = root_allowed_moves
         # pre-expand each allowed move as a child so the search distributes sims among them
-        for move in list(root.untried_moves):
-            root.add_child(move)
+
 
     start_time = time.perf_counter()
     it = 0
@@ -668,7 +668,7 @@ def mcts_search(
             min_move_count = (child.move_count_min+1) if child.move_count_min != float('inf') else 0
             return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
 
-        children = list([c for c in root.children if c.visits > 0])
+        children = list(root.children)
         by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
 
         print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
@@ -768,9 +768,6 @@ class RefactoredHexAgent(AgentBase):
             # If we only have one option
             chosen_move = move_set[0]
             # Don't bother checking others (case where hand is forced)
-        elif len(move_set) == 0:
-            # If
-            move_set = get_legal_moves(board)
         else:
             # Otherwise, try to figure out which move is our best move
             chosen_move = mcts_search(
