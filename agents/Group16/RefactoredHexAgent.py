@@ -19,41 +19,41 @@ DIRECTIONS = [
     (1, -1),
 ]
 
-def generate_adjacent_tiles(board,colour):
+
+def generate_adjacent_tiles(board, colour):
 
     # Take all of our tiles, combine that with our walls
     # If any adjacent tiles to that tile are empty, that is an adjacent tile
     # Return a list of all adjacent tiles
-    
-    our_moves = get_colour_moves(board,colour)
+
+    our_moves = get_colour_moves(board, colour)
     wall_list = setup_walls(colour)
     legals = get_legal_moves(board)
-    all_tiles = our_moves+wall_list
+    all_tiles = our_moves + wall_list
 
     adjacent_tiles = []
 
-    
     for tile in all_tiles:
         for direction in DIRECTIONS:
-            new_tile = Move(tile.x+direction[0],tile.y+direction[1])
+            new_tile = Move(tile.x + direction[0], tile.y + direction[1])
             adjacent_tiles.append(new_tile)
 
-    legal_adjacent_tiles = set(legals)&set(adjacent_tiles)
+    legal_adjacent_tiles = set(legals) & set(adjacent_tiles)
     return list(legal_adjacent_tiles)
 
-    
 
 def setup_walls(colour):
     wall_list = []
     if colour == colour.RED:
         for i in range(11):
-            wall_list.append(Move(-1,i))
-            wall_list.append(Move(11,i))
+            wall_list.append(Move(-1, i))
+            wall_list.append(Move(11, i))
     if colour == colour.BLUE:
         for i in range(11):
-            wall_list.append(Move(i,-1))
-            wall_list.append(Move(i,11))
+            wall_list.append(Move(i, -1))
+            wall_list.append(Move(i, 11))
     return wall_list
+
 
 def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
     """Get a list of all the empty tiles on the board."""
@@ -65,13 +65,12 @@ def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
     return moves
 
 
-
 def identify_decision(information_set):
     """
     This is the part that decides the decision we should make given the change in boardstate
     If list of pairs is empty: we dont care
     If len 1: This case
-    I.e., the cases 
+    I.e., the cases
 
     Returns as the key of execution_flow_dict
     """
@@ -95,10 +94,14 @@ def identify_decision(information_set):
     """
 
     # Priority ranking of our decisions, lower index = higher priority
-    priority_list = ["Defend", "Win", "Play Best Fair Move","Swap","Central Move","Potential Connections"]
-
-
-
+    priority_list = [
+        "Defend",
+        "Win",
+        "Play Best Fair Move",
+        "Swap",
+        "Central Move",
+        "Potential Connections",
+    ]
 
     # We just add things to this list as we go
     list_of_decisions = []
@@ -106,37 +109,44 @@ def identify_decision(information_set):
         list_of_decisions.append("Play Best Fair Move")
     if information_set["Turn"] == 2:
         # Figure out if we want to swap or not
-        Swap_Decision = should_swap(information_set["Board"],information_set["Opp Move"])
+        Swap_Decision = should_swap(
+            information_set["Board"], information_set["Opp Move"]
+        )
         if Swap_Decision:
             list_of_decisions.append("Swap")
         else:
             list_of_decisions.append("Central Move")
     if information_set["Turn"] == 3:
         # Check whether our opponent swapped us or not
-        if information_set["Opp Move"] == Move(-1,-1):
+        if information_set["Opp Move"] == Move(-1, -1):
             # We got swapped
             list_of_decisions.append("Central Move")
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections")
-    if len(information_set["Lost Bridges"]) != 0 and information_set["Opp Move"] != Move(-1,-1):
+    if len(information_set["Lost Bridges"]) != 0 and information_set[
+        "Opp Move"
+    ] != Move(-1, -1):
         # The enemy has threatened a strong connection of ours
         list_of_decisions.append("Defend")
-    if check_reach(information_set["Colour"], information_set["Board"], information_set["Bridges"]):
+    if check_reach(
+        information_set["Colour"], information_set["Board"], information_set["Bridges"]
+    ):
         list_of_decisions.append("Win")
-    
+
     # print(list_of_decisions)
 
     """
     Determine priority
     """
 
-    list_of_decisions = sorted(list_of_decisions,key = lambda c: priority_list.index(c))
+    list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
     return list_of_decisions
 
-def execution_flow(old_current_bridges,turn,colour,board,opp_move):
+
+def execution_flow(old_current_bridges, turn, colour, board, opp_move):
     """
 
     Gets our information
@@ -144,41 +154,50 @@ def execution_flow(old_current_bridges,turn,colour,board,opp_move):
 
     Step by step
     execution_flow_dict{
-        str : corresponding function for decision 
-        }    
+        str : corresponding function for decision
+        }
     """
 
     # Generate our current information
-    new_current_bridges = generate_current_bridges(colour,board)
+    new_current_bridges = generate_current_bridges(colour, board)
     # print(new_current_bridges)
     # Using our new current bridges and our old current bridges
     # Check what's different
-    bridges_lost = compare_previous_board_state(old_current_bridges,new_current_bridges)
+    bridges_lost = compare_previous_board_state(
+        old_current_bridges, new_current_bridges
+    )
     # Returns a List(tuple) containing the difference of old bridges compared to new bridges
 
     # print(bridges_lost)
-    
+
     # This is the function that takes all the information we have
     # And all the factors we need to consider
-    information_set = {"Lost Bridges": bridges_lost, "Turn": turn, "Colour":colour, "Board": board, "Opp Move": opp_move, "Bridges": new_current_bridges}
+    information_set = {
+        "Lost Bridges": bridges_lost,
+        "Turn": turn,
+        "Colour": colour,
+        "Board": board,
+        "Opp Move": opp_move,
+        "Bridges": new_current_bridges,
+    }
     set_of_constraints = identify_decision(information_set)
 
     execution_flow_dict = {
-        "Play Best Fair Move" : get_fair_first_moves,
-        "Swap" : swap,
-        "Central Move" : central_move,
-        "Potential Connections" : generate_potential_connections,
-        "Defend" : defend,
-        "Win": win
+        "Play Best Fair Move": get_fair_first_moves,
+        "Swap": swap,
+        "Central Move": central_move,
+        "Potential Connections": generate_potential_connections,
+        "Defend": defend,
+        "Win": win,
     }
-    function_parameters ={
+    function_parameters = {
         # We dont know how to not give parameters this way, dont question it
-        "Play Best Fair Move" : [],
+        "Play Best Fair Move": [],
         "Swap": [],
-        "Central Move" : [board],
-        "Potential Connections": (colour,board),
-        "Defend" : (bridges_lost,opp_move),
-        "Win": [colour,board,new_current_bridges]
+        "Central Move": [board],
+        "Potential Connections": (colour, board),
+        "Defend": (bridges_lost, opp_move),
+        "Win": [colour, board, new_current_bridges],
     }
 
     # When we consider all of the constraints that exist inside of decisions
@@ -188,13 +207,13 @@ def execution_flow(old_current_bridges,turn,colour,board,opp_move):
     # This is just a matter of constraint relaxation
 
     collection_of_movesets = []
-    
+
     for constraint in set_of_constraints:
         move_set = execution_flow_dict[constraint](*function_parameters[constraint])
         collection_of_movesets.append(set(move_set))
 
-
     return constraint_moveset(collection_of_movesets)
+
 
 def check_reach(colour, board, bridges):
     """
@@ -217,32 +236,34 @@ def check_reach(colour, board, bridges):
 
     return board_copy.has_ended(colour)
 
-def win(colour,board,new_current_bridges):
-        """
-        Reduce the board
-        Note: might not always give the same path 
-        """
-        # Check if we win
-        smallest_so_far = new_current_bridges.copy()
 
-        #Unpack bridges    
-        for bridge_pair in new_current_bridges:
-            # This is a pair of bridges
-            test_bridges = smallest_so_far.copy()
-            test_bridges.remove(bridge_pair)
-            if check_reach(colour,board,test_bridges):
-                smallest_so_far = test_bridges.copy()
+def win(colour, board, new_current_bridges):
+    """
+    Reduce the board
+    Note: might not always give the same path
+    """
+    # Check if we win
+    smallest_so_far = new_current_bridges.copy()
 
-        smallest_so_far = list(set([x for sublist in smallest_so_far for x in sublist]))
-        return smallest_so_far    
-        
+    # Unpack bridges
+    for bridge_pair in new_current_bridges:
+        # This is a pair of bridges
+        test_bridges = smallest_so_far.copy()
+        test_bridges.remove(bridge_pair)
+        if check_reach(colour, board, test_bridges):
+            smallest_so_far = test_bridges.copy()
 
-def defend(bridges_lost,opp_move):
+    smallest_so_far = list(set([x for sublist in smallest_so_far for x in sublist]))
+    return smallest_so_far
+
+
+def defend(bridges_lost, opp_move):
     # Go through all pairs of bridges inside bridges_lost
 
     opposite_list = list(set([x for sublist in bridges_lost for x in sublist]))
     opposite_list.remove(opp_move)
     return opposite_list
+
 
 def constraint_moveset(movesets):
     current = movesets[0]
@@ -252,8 +273,10 @@ def constraint_moveset(movesets):
         current = current & move_set
     return current
 
+
 def swap():
-    return [Move(-1,-1)]
+    return [Move(-1, -1)]
+
 
 def central_move(board):
     """
@@ -264,16 +287,23 @@ def central_move(board):
     legals = get_legal_moves(board)
 
     central_moves = []
-    for x in range(2,9):
+    for x in range(2, 9):
         for y in range(11):
             if (x, y) not in central_corners:
-                central_moves.append(Move(x,y))
-    obtuse_corners = [Move(0, 10), Move(1, 9), Move(1, 10), Move(9, 0), Move(9, 1), Move(10, 0)]
+                central_moves.append(Move(x, y))
+    obtuse_corners = [
+        Move(0, 10),
+        Move(1, 9),
+        Move(1, 10),
+        Move(9, 0),
+        Move(9, 1),
+        Move(10, 0),
+    ]
     central_moves += obtuse_corners
 
     # Just make sure that the central move that we are trying to play is actually legal
     central_moves = set(central_moves) & set(legals)
-    
+
     return list(central_moves)
 
 
@@ -284,19 +314,27 @@ def get_fair_first_moves():
     """
     size = 11
 
-    base_candidates = {Move(1, 2), Move(1, 7), Move(2, 5), Move(8, 5), Move(9, 2), Move(9, 7)}
+    base_candidates = {
+        Move(1, 2),
+        Move(1, 7),
+        Move(2, 5),
+        Move(8, 5),
+        Move(9, 2),
+        Move(9, 7),
+    }
 
     # Add edge candidates avoiding corners
     candidates = base_candidates.copy()
     for x in range(size):
-        if x >= 2:                 # left edge
+        if x >= 2:  # left edge
             candidates.add(Move(x, 0))
-        if x <= size - 3:          # right edge
+        if x <= size - 3:  # right edge
             candidates.add(Move(x, size - 1))
-    
+
     return candidates
 
-def generate_potential_connections(colour,board):
+
+def generate_potential_connections(colour, board):
     """
     Go through all points that are our colours
     Run cardinal_dirs of that point
@@ -304,24 +342,23 @@ def generate_potential_connections(colour,board):
     Dictionary Potential connections{
         Tile: List[Tile]
         Potential connection : List of pairs bridges that are dependent on that potential connection
-    } 
+    }
     """
 
     wall_list = setup_walls(colour)
 
-    
     # We want a list of our tiles
-    our_tiles = get_colour_moves(board,colour) + wall_list
-    
+    our_tiles = get_colour_moves(board, colour) + wall_list
+
     potential_connections = []
 
     # For each tile
     for tile in our_tiles:
-        potential_connections += cardinal_dirs(tile,wall_list,None,board)
+        potential_connections += cardinal_dirs(tile, wall_list, None, board)
     return list(set(potential_connections))
 
 
-def generate_current_bridges(colour, board,chosen_move = None):
+def generate_current_bridges(colour, board, chosen_move=None):
     """
     Go through all points that are our colours
     Run cardinal_dirs of that point
@@ -334,14 +371,13 @@ def generate_current_bridges(colour, board,chosen_move = None):
     This must be done at the start AND at the end of our turn
     """
 
-
     wall_list = setup_walls(colour)
 
     if chosen_move:
         board.tiles[chosen_move.x][chosen_move.y].colour = colour
-    
+
     # We want a list of our tiles
-    our_tiles = get_colour_moves(board,colour)
+    our_tiles = get_colour_moves(board, colour)
     # If we're retrospectively checking our current bridges we've generated
     # AFTER we've played our move
     # We have to add the move we've played to the list of our current tiles
@@ -350,12 +386,12 @@ def generate_current_bridges(colour, board,chosen_move = None):
 
     # For each tile
     for tile in our_tiles:
-        current_bridges += cardinal_dirs(tile,wall_list,colour,board)
+        current_bridges += cardinal_dirs(tile, wall_list, colour, board)
     # print(wall_list)
     return list(set(current_bridges))
 
 
-def compare_previous_board_state(old_current_bridges,new_current_bridges):
+def compare_previous_board_state(old_current_bridges, new_current_bridges):
     """
     Check if old current_bridges is different to new current_bridges
     Should return a list of the pairs that are different
@@ -365,7 +401,6 @@ def compare_previous_board_state(old_current_bridges,new_current_bridges):
     # print("New",new_current_bridges)
 
     return list(set(old_current_bridges).difference(set(new_current_bridges)))
-    
 
 
 def get_legal_moves(board) -> list[Move]:
@@ -392,19 +427,21 @@ def apply_move(board: Board, move: Move, colour: Colour) -> None:
     x, y = move.x, move.y
     board.set_tile_colour(x, y, colour)
 
+
 def is_central(move: Move, size: int) -> bool:
     """
     Check if a move is in the central area of the board.
     """
-    central_corners = [(2, 0), (8, size-1), (2, 0), (8, size-1)]
+    central_corners = [(2, 0), (8, size - 1), (2, 0), (8, size - 1)]
 
-    if (2 <= move.x <= size-3):
+    if 2 <= move.x <= size - 3:
         for x, y in central_corners:
             if (move.x, move.y) == (x, y):
                 return False
         return True
-    
+
     return False
+
 
 def should_swap(board: Board, opp_move: Move) -> bool:
     """
@@ -412,7 +449,7 @@ def should_swap(board: Board, opp_move: Move) -> bool:
     If opponent plays in central area or obtuse corners, swap.
     """
     size = board.size
-    obtuse_corners = [(0, 10), (1, 9), (1, size-1), (9, 0), (9, 1), (10, 0)]
+    obtuse_corners = [(0, 10), (1, 9), (1, size - 1), (9, 0), (9, 1), (10, 0)]
 
     if is_central(opp_move, size):
         return True
@@ -422,6 +459,8 @@ def should_swap(board: Board, opp_move: Move) -> bool:
             return True
 
     return False
+
+
 class MCTSNode:
     """
     A node in the MCTS tree.
@@ -455,9 +494,9 @@ class MCTSNode:
 
         self.amaf_visits: int = 0
         self.amaf_value: float = 0.0
-        
-        self.move_count_sum: float = 0.0    # sum of rollout lengths (for avg)
-        self.move_count_min: float = float('inf')  # NEW: track minimum rollout length
+
+        self.move_count_sum: float = 0.0  # sum of rollout lengths (for avg)
+        self.move_count_min: float = float("inf")  # NEW: track minimum rollout length
 
     def is_fully_expanded(self) -> bool:
         return len(self.untried_moves) == 0
@@ -524,11 +563,11 @@ class MCTSNode:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
-        if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):           
-            self.value += reward  
+        if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):
+            self.value += reward
         """
         rollout_length = len(rollout_moves)
-        
+
         for child in self.children:
             if child.move and (child.move.x, child.move.y) in rollout_moves:
                 child.amaf_visits += 1
@@ -579,12 +618,6 @@ def play_from_node_S(
         current_player = Colour.opposite(current_player)
 
 
-
-
-
-
-
-
 def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
     """Get a list of all the empty tiles on the board."""
     moves: list[Move] = []
@@ -601,8 +634,8 @@ def mcts_search(
     max_iterations: int = 1000,
     max_time_seconds: float | None = 2,
     root_allowed_moves: list[Move] | None = None,
-    report_top_k: int | None = None,             # how many top entries to report (None=off)
-    exploration: float = 1.4,                    # exploration constant 
+    report_top_k: int | None = None,  # how many top entries to report (None=off)
+    exploration: float = 1.4,  # exploration constant
 ) -> Move:
     """
     Run MCTS from root_board for my_colour and return the chosen Move.
@@ -620,24 +653,18 @@ def mcts_search(
         move=None,
     )
 
-     # If a restricted candidate list is provided, limit/expand the root to only those moves.
+    # If a restricted candidate list is provided, limit/expand the root to only those moves.
     if root_allowed_moves:
         # keep only allowed moves in root.untried_moves
         root.untried_moves = root_allowed_moves
         # pre-expand each allowed move as a child so the search distributes sims among them
 
-
     start_time = time.perf_counter()
     it = 0
 
-    workers = (
-        multiprocessing.cpu_count()
-    )  
-
+    workers = multiprocessing.cpu_count()
 
     instant_victory = None
-
-
 
     with Pool(processes=workers) as pool:
         while True:
@@ -664,7 +691,7 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
             # If the node we picked wins in one move, play it
-            if node.is_terminal(): 
+            if node.is_terminal():
                 instant_victory = move
                 return move
 
@@ -682,7 +709,6 @@ def mcts_search(
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
 
-    
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
@@ -697,31 +723,51 @@ def mcts_search(
             winrate = (child.value / visits) if visits > 0 else 0.0
             ucb = root.ucb1(child, exploration)
             mv = child.move
-            avg_move_count = (child.move_count_sum / amafvisits) if amafvisits > 0 else 0.0
-            min_move_count = (child.move_count_min+1) if child.move_count_min != float('inf') else 0
-            return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
+            avg_move_count = (
+                (child.move_count_sum / amafvisits) if amafvisits > 0 else 0.0
+            )
+            min_move_count = (
+                (child.move_count_min + 1)
+                if child.move_count_min != float("inf")
+                else 0
+            )
+            return {
+                "move": (mv.x, mv.y),
+                "visits": visits,
+                "winrate": winrate,
+                "ucb1": ucb,
+                "avg_move_count": avg_move_count,
+                "min_move_count": min_move_count,
+            }
 
         children = list(root.children)
-        by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
+        by_valuevisits = sorted(
+            children, key=lambda c: c.value / c.visits, reverse=True
+        )[:report_top_k]
 
         print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
         print("Top by winrate:")
         for c in by_valuevisits:
             s = child_stats(c)
-            print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f} min={s['min_move_count']:.0f} avg={s['avg_move_count']:.1f}")
+            print(
+                f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f} min={s['min_move_count']:.0f} avg={s['avg_move_count']:.1f}"
+            )
 
     best_child = max(
-        children, 
+        children,
         key=lambda c: (
             c.value / c.visits,  # primary: winrate (higher is better)
-            -c.move_count_min if c.move_count_min != float('inf') else 0  # secondary: shortest winning rollout
-        )
+            (
+                -c.move_count_min if c.move_count_min != float("inf") else 0
+            ),  # secondary: shortest winning rollout
+        ),
     )
-    if instant_victory: return move
+    if instant_victory:
+        return move
     return best_child.move
 
 
-def cardinal_dirs(current_tile:Move, walls, flag, board):
+def cardinal_dirs(current_tile: Move, walls, flag, board):
     """
     Calculate all possible strong connections from a given tile
     We want to calculate POTENTIAL connections and EXISTING connections now
@@ -732,24 +778,23 @@ def cardinal_dirs(current_tile:Move, walls, flag, board):
     """
     x = current_tile.x
     y = current_tile.y
-    
+
     # A dictionary of triplets (a,b,c) representing strong connections and the bridges between them
     # a : Bridge
     # b : Bridge
     # c : Strong connection
     dirs = {
-        "N" : [Move(x-1,y),Move(x-1,y+1),Move(x-2,y+1)],
-        "NE" : [Move(x-1,y+1),Move(x,y+1),Move(x-1,y+2)],
-        "NW" : [Move(x-1,y),Move(x,y-1),Move(x-1,y-1)],
-        "SE" : [Move(x,y+1),Move(x+1,y),Move(x+1,y+1)],
-        "SW" : [Move(x,y-1),Move(x+1,y-1),Move(x+1,y-2)],
-        "S" : [Move(x+1,y-1),Move(x+1,y),Move(x+2,y-1)],
-        }
-
+        "N": [Move(x - 1, y), Move(x - 1, y + 1), Move(x - 2, y + 1)],
+        "NE": [Move(x - 1, y + 1), Move(x, y + 1), Move(x - 1, y + 2)],
+        "NW": [Move(x - 1, y), Move(x, y - 1), Move(x - 1, y - 1)],
+        "SE": [Move(x, y + 1), Move(x + 1, y), Move(x + 1, y + 1)],
+        "SW": [Move(x, y - 1), Move(x + 1, y - 1), Move(x + 1, y - 2)],
+        "S": [Move(x + 1, y - 1), Move(x + 1, y), Move(x + 2, y - 1)],
+    }
 
     legals = get_legal_moves(board)
     if flag:
-        our_moves = get_colour_moves(board,flag)
+        our_moves = get_colour_moves(board, flag)
     result = []
 
     if flag == None:
@@ -759,13 +804,13 @@ def cardinal_dirs(current_tile:Move, walls, flag, board):
     else:
         for triplet in dirs.values():
             if triplet[0] in legals and triplet[1] in legals:
-                    if (triplet[2] in our_moves) or (triplet[2] in walls):
-                        sorted_pair = tuple(sorted((triplet[0],triplet[1]), 
-                        key=lambda move: (
-                            move.x,  
-                            move.y
-                        )))
-                        result.append(sorted_pair)
+                if (triplet[2] in our_moves) or (triplet[2] in walls):
+                    sorted_pair = tuple(
+                        sorted(
+                            (triplet[0], triplet[1]), key=lambda move: (move.x, move.y)
+                        )
+                    )
+                    result.append(sorted_pair)
     return result
 
 
@@ -776,16 +821,14 @@ class RefactoredHexAgent(AgentBase):
     HexAgent class
     """
 
-
     def __init__(self, colour: Colour):
         self.walls = []
 
         # Old: Move : List[Move]
         # New: List(Tuple(Move,Move))
         self.current_bridges = []
-        
-        super().__init__(colour)
 
+        super().__init__(colour)
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """
@@ -794,8 +837,9 @@ class RefactoredHexAgent(AgentBase):
         Turn 2: Decide whether to swap based on opponent's first move.
         Subsequent turns: Use MCTS to select the best move.
         """
-        move_set = list(execution_flow(self.current_bridges,turn,self.colour,board,opp_move))
-
+        move_set = list(
+            execution_flow(self.current_bridges, turn, self.colour, board, opp_move)
+        )
 
         if len(move_set) == 1:
             # If we only have one option
@@ -806,14 +850,15 @@ class RefactoredHexAgent(AgentBase):
             chosen_move = mcts_search(
                 root_board=board,
                 my_colour=self.colour,
-                max_iterations=5000,          # max number of random plays
-                max_time_seconds=2,           # time limit per move
-                report_top_k=1,               # show top-5 for normal turns
-                root_allowed_moves=move_set
+                max_iterations=5000,  # max number of random plays
+                max_time_seconds=2,  # time limit per move
+                report_top_k=1,  # show top-5 for normal turns
+                root_allowed_moves=move_set,
             )
 
-        self.current_bridges = generate_current_bridges(self.colour,board,chosen_move)
+        self.current_bridges = generate_current_bridges(self.colour, board, chosen_move)
         return chosen_move
+
 
 # RUN CMDS
 
