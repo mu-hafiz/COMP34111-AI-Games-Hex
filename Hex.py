@@ -90,8 +90,6 @@ if __name__ == "__main__":
 
     if args.analysis:
 
-        stats = [0,0,0,0,0]
-        # P1 Errors, P1 wins, Games Total, P2 Wins, P2 Errors
         wins = {}
         wins[args.player1Name] = 0
         wins[args.player2Name] = 0
@@ -100,9 +98,16 @@ if __name__ == "__main__":
         turnsPerWin[args.player1Name] = []
         turnsPerWin[args.player2Name] = []
 
-
         turnsPerGame = []
-        stats = [0,0]
+
+        errors = {}
+        errors[args.player1Name] = 0
+        errors[args.player2Name] = 0
+
+        turnsPerError = {}
+        turnsPerError[args.player1Name] = []
+        turnsPerError[args.player2Name] = []
+
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
             print(f"GAME {game+1}:")
@@ -118,44 +123,65 @@ if __name__ == "__main__":
                 board_size=args.board_size,
                 logDest=args.log,
                 verbose=args.verbose,
-                stats = stats
             )
+
             try:
                 g.run()
             except KeyboardInterrupt:
-                print("blah, i did this personally")
-                exit(-1) 
-       
-            winner = g.players[g.current_player].name
-            turns = g.turn
-            stats = [len(turnsPerWin[args.player1Name]),len(turnsPerWin[args.player2Name])]
+                print("Exiting...")
+                exit(-1)
+            except:
+                errorPlayer = g.players[Colour.opposite(g.current_player)].name
+                turns = g.turn
+                errors[winner] += 1
+                turnsPerGame.append(turns)
+                turnsPerError[winner].append(turns)
+            else:
+                winner = g.players[g.current_player].name
+                turns = g.turn
+                wins[winner] += 1
+                turnsPerGame.append(turns)
+                turnsPerWin[winner].append(turns)
+            
+            print("-----------------------------------------------------------------------------")
+            print("Running totals:")
+            print(f"Total Games: {game+1}\n")
+            print(f"{args.player1Name} ({args.player1}):")
+            print(f"Number of wins: {len(turnsPerWin[args.player1Name])}")
+            print(f"Number of errors: {len(turnsPerError[args.player1Name])}\n")
+            print(f"{args.player2Name} ({args.player2}):")
+            print(f"Number of wins: {len(turnsPerWin[args.player2Name])}")
+            print(f"Number of errors: {len(turnsPerError[args.player2Name])}\n")
 
 
-            wins[winner] += 1
-            turnsPerGame.append(turns)
-            turnsPerWin[winner].append(turns)
         print("-----------------------------------------------------------------------------")
         print("FINAL RESULTS:\n")
         print(f"Total Games: {args.games}")
-        print(f"Finished games: {args.games}")
         print(f"Turns Per Game: {turnsPerGame}")
+        print(f"Average turns per game: {sum(turnsPerGame) / args.games}")
 
-        print(f"{args.player1Name} ({args.player1}):")
+        print(f"\n{args.player1Name} ({args.player1}):")
         print(f"Number of wins: {len(turnsPerWin[args.player1Name])}")
         if len(turnsPerWin[args.player1Name]) > 0:
             print(f"Turns Per Win: {turnsPerWin[args.player1Name]}")
             print(f"Quickest game: {min(turnsPerWin[args.player1Name])} turns")
             print(f"Slowest game: {max(turnsPerWin[args.player1Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}\n")
+            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}")
+        print(f"\nNumber of errors: {len(turnsPerError[args.player1Name])}")
+        if len(turnsPerError[args.player1Name]) > 0:
+            print(f"Turns Per Error: {turnsPerError[args.player1Name]}")
 
-        print(f"{args.player2Name} ({args.player2}):")
+        print(f"\n{args.player2Name} ({args.player2}):")
         print(f"Number of wins: {len(turnsPerWin[args.player2Name])}")
         if len(turnsPerWin[args.player2Name]) > 0:
             print(f"Turns Per Win: {turnsPerWin[args.player2Name]}")
             print(f"Quickest game: {min(turnsPerWin[args.player2Name])} turns")
             print(f"Slowest game: {max(turnsPerWin[args.player2Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}\n")
-    
+            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}")
+        print(f"\nNumber of errors: {len(turnsPerError[args.player2Name])}")
+        if len(turnsPerError[args.player2Name]) > 0:
+            print(f"Turns Per Error: {turnsPerError[args.player2Name]}")
+
     else:
         g = Game(
             player1=Player(
@@ -168,6 +194,6 @@ if __name__ == "__main__":
             ),
             board_size=args.board_size,
             logDest=args.log,
-            verbose=args.verbose
+            verbose=args.verbose,
         )
         g.run()
