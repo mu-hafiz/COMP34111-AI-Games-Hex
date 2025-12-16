@@ -140,7 +140,7 @@ if __name__ == "__main__":
             error_rate = sum([sum(k) for k in turnsPerError.values()])
             winner = g.players[g.current_player].name
             turns = g.turn
-            stats = [len(turnsPerError[args.player1Name]),wins[args.player1Name],error_game,wins[args.player2Name],len(turnsPerError[args.player2Name])]
+            stats = [len(turnsPerError[args.player1Name]),len(turnsPerWin[args.player1Name]),error_game,len(turnsPerWin[args.player2Name]),len(turnsPerError[args.player2Name])]
 
 
             wins[winner] += 1

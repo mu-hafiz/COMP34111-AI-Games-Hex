@@ -66,6 +66,7 @@ def identify_decision(information_set):
 
 
 
+
     # We just add things to this list as we go
     list_of_decisions = []
     if information_set["Turn"] == 1:
@@ -85,13 +86,14 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections")
-    if len(information_set["Lost Bridges"]) != 0 and information_set["Turn"] != 3:
+    if len(information_set["Lost Bridges"]) != 0 and information_set["Opp Move"] != Move(-1,-1):
         # The enemy has threatened a strong connection of ours
         list_of_decisions.append("Defend")
     if check_reach(information_set["Colour"], information_set["Board"], information_set["Bridges"]):
         list_of_decisions.append("Win")
     
-        
+    # print(list_of_decisions)
+
     """
     Determine priority
     """
@@ -114,13 +116,13 @@ def execution_flow(old_current_bridges,turn,colour,board,opp_move):
 
     # Generate our current information
     new_current_bridges = generate_current_bridges(colour,board)
-    print(new_current_bridges)
+    # print(new_current_bridges)
     # Using our new current bridges and our old current bridges
     # Check what's different
     bridges_lost = compare_previous_board_state(old_current_bridges,new_current_bridges)
     # Returns a List(tuple) containing the difference of old bridges compared to new bridges
 
-    print(bridges_lost)
+    # print(bridges_lost)
     
     # This is the function that takes all the information we have
     # And all the factors we need to consider
@@ -139,7 +141,7 @@ def execution_flow(old_current_bridges,turn,colour,board,opp_move):
         # We dont know how to not give parameters this way, dont question it
         "Play Best Fair Move" : [],
         "Swap": [],
-        "Central Move" : [],
+        "Central Move" : [board],
         "Potential Connections": (colour,board),
         "Defend" : (bridges_lost,opp_move),
         "Win": [colour,board,new_current_bridges]
@@ -219,11 +221,13 @@ def constraint_moveset(movesets):
 def swap():
     return [Move(-1,-1)]
 
-def central_move():
+def central_move(board):
     """
     Check if a move is in the central area of the board.
     """
     central_corners = [(2, 0), (8, 10), (2, 0), (8, 10)]
+
+    legals = get_legal_moves(board)
 
     central_moves = []
     for x in range(2,9):
@@ -232,7 +236,11 @@ def central_move():
                 central_moves.append(Move(x,y))
     obtuse_corners = [Move(0, 10), Move(1, 9), Move(1, 10), Move(9, 0), Move(9, 1), Move(10, 0)]
     central_moves += obtuse_corners
-    return central_moves
+
+    # Just make sure that the central move that we are trying to play is actually legal
+    central_moves = set(central_moves) & set(legals)
+    
+    return list(central_moves)
 
 
 def get_fair_first_moves():
@@ -641,12 +649,12 @@ def mcts_search(
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
 
+    
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
-    print()
     # Optionally prepare and print top-k rankings
     if report_top_k is not None and report_top_k > 0 and root.children:
         # compute stats for each child
@@ -660,7 +668,7 @@ def mcts_search(
             min_move_count = (child.move_count_min+1) if child.move_count_min != float('inf') else 0
             return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
 
-        children = list(root.children)
+        children = list([c for c in root.children if c.visits > 0])
         by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
 
         print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
@@ -670,7 +678,7 @@ def mcts_search(
             print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f} min={s['min_move_count']:.0f} avg={s['avg_move_count']:.1f}")
 
     best_child = max(
-        root.children, 
+        children, 
         key=lambda c: (
             c.value / c.visits,  # primary: winrate (higher is better)
             -c.move_count_min if c.move_count_min != float('inf') else 0  # secondary: shortest winning rollout
@@ -755,24 +763,29 @@ class RefactoredHexAgent(AgentBase):
         """
         move_set = list(execution_flow(self.current_bridges,turn,self.colour,board,opp_move))
 
+
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
             # Don't bother checking others (case where hand is forced)
+        elif len(move_set) == 0:
+            # If
+            move_set = get_legal_moves(board)
         else:
             # Otherwise, try to figure out which move is our best move
             chosen_move = mcts_search(
                 root_board=board,
                 my_colour=self.colour,
                 max_iterations=5000,          # max number of random plays
-                max_time_seconds=1,           # time limit per move
-                report_top_k=5,               # show top-5 for normal turns
+                max_time_seconds=2,           # time limit per move
+                report_top_k=1,               # show top-5 for normal turns
                 root_allowed_moves=move_set
             )
 
         self.current_bridges = generate_current_bridges(self.colour,board,chosen_move)
         return chosen_move
 
+# RUN CMDS
 
 # Agent VS Naive:
 # Red
@@ -785,6 +798,9 @@ class RefactoredHexAgent(AgentBase):
 
 # To run the analysis over 100 games (this took 2-3 hours for me):
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
+
+# Playing main vs new agent
+# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "(New) Rewritten HexAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "(Old) MCTS Only" -a -g 50
 
 # To play the agent against a human:
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
