@@ -145,7 +145,54 @@ def apply_move(board: Board, move: Move, colour: Colour) -> None:
     x, y = move.x, move.y
     board.set_tile_colour(x, y, colour)
 
+def get_fair_first_moves(board: Board) -> set[tuple[int, int]]:
+    """
+    Choose a fair first move to combat the swap rule.
+    Returns a list of Move objects.
+    """
+    size = board.size
 
+    base_candidates = {(1, 2), (1, 7), (2, 5), (8, 5), (9, 2), (9, 7)}
+
+    # Add edge candidates avoiding corners
+    candidates = base_candidates.copy()
+    for x in range(size):
+        if x >= 2:                 # left edge
+            candidates.add((x, 0))
+        if x <= size - 3:          # right edge
+            candidates.add((x, size - 1))
+    return candidates
+
+def is_central(move: Move, size: int) -> bool:
+    """
+    Check if a move is in the central area of the board.
+    """
+    central_corners = [(2, 0), (8, size-1), (2, 0), (8, size-1)]
+
+    if (2 <= move.x <= size-3):
+        for x, y in central_corners:
+            if (move.x, move.y) == (x, y):
+                return False
+        return True
+    
+    return False
+
+def should_swap(board: Board, opp_move: Move) -> bool:
+    """
+    Decide whether to swap based on opponent's first move.
+    If opponent plays in central area or obtuse corners, swap.
+    """
+    size = board.size
+    obtuse_corners = [(0, size-1), (1, size-2), (1, size-1), (9, 0), (9, 1), (10, 0)]
+
+    if is_central(opp_move, size):
+        return True
+
+    for x, y in obtuse_corners:
+        if (opp_move.x, opp_move.y) == (x, y):
+            return True
+
+    return False
 class MCTSNode:
     """
     A node in the MCTS tree.
@@ -179,6 +226,9 @@ class MCTSNode:
 
         self.amaf_visits: int = 0
         self.amaf_value: float = 0.0
+        
+        self.move_count_sum: float = 0.0    # sum of rollout lengths (for avg)
+        self.move_count_min: float = float('inf')  # NEW: track minimum rollout length
 
         self.pruned_moves: list[tuple[Move, int]] | None = None
 
@@ -254,18 +304,24 @@ class MCTSNode:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
-        """
-        """
         if (reward == 1 and (self.player_to_move == root_colour)) or (reward == -1 and (self.player_to_move == Colour.opposite(root_colour))):           
             self.value += reward  
         """
+        rollout_length = len(rollout_moves)
+        
         for child in self.children:
             if child.move and (child.move.x, child.move.y) in rollout_moves:
                 child.amaf_visits += 1
                 child.amaf_value += reward
+                child.move_count_sum += rollout_length
+                if reward > 0:  # only track min for winning rollouts
+                    child.move_count_min = min(child.move_count_min, rollout_length)
 
         self.amaf_visits += 1
         self.amaf_value += reward
+        self.move_count_sum += rollout_length
+        if reward > 0:
+            self.move_count_min = min(self.move_count_min, rollout_length)
 
         self.value += reward
         self.visits += 1
@@ -363,12 +419,18 @@ def mcts_search(
     my_colour: Colour,
     max_iterations: int = 1000,
     max_time_seconds: float | None = 2,
+    root_allowed_moves: list[Move] | None = None,
+    report_top_k: int | None = None,             # how many top entries to report (None=off)
+    exploration: float = 1.4,                    # exploration constant 
 ) -> Move:
     """
     Run MCTS from root_board for my_colour and return the chosen Move.
 
     max_iterations  : hard cap on how many simulations we run
     max_time_seconds: soft time budget per move (to stay within 5 min total)
+    report_top_k    : if set, print top-k children by visits and by UCB1 at end of search
+    report_verbose  : whether to print textual output (useful to toggle)
+    exploration     : exploration constant used in UCB1 selection and reporting
     """
     root = MCTSNode(
         board=clone_board(root_board),
@@ -377,12 +439,22 @@ def mcts_search(
         move=None,
     )
 
+     # If a restricted candidate list is provided, limit/expand the root to only those moves.
+    if root_allowed_moves is not None:
+        # keep only allowed moves in root.untried_moves
+        root.untried_moves = [m for m in root.untried_moves if (m.x, m.y) in root_allowed_moves]
+        # pre-expand each allowed move as a child so the search distributes sims among them
+        for move in list(root.untried_moves):
+            root.add_child(move)
+
     start_time = time.perf_counter()
     it = 0
 
     workers = (
         multiprocessing.cpu_count()
     )  # adjust this for ur pc (run nproc in terminal or tinker urself)
+
+    instant_victory = None
 
     with Pool(processes=workers) as pool:
         while True:
@@ -395,6 +467,9 @@ def mcts_search(
                 break
 
             node = root
+
+            # bad version
+
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
@@ -426,6 +501,14 @@ def mcts_search(
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
+
+            # how do we return the move we just played as a 
+            if node.is_terminal(): 
+                instant_victory = move
+
+
+            
+
             """
             not serialisable
             reward = play_from_node(node, my_colour=my_colour)
@@ -448,6 +531,7 @@ def mcts_search(
                 while node is not None:
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
+            if instant_victory: break
 
     # After search: pick child with the most visits
     if not root.children:
@@ -455,8 +539,36 @@ def mcts_search(
         legal_moves = get_legal_moves(root_board)
         return random.choice(legal_moves)
 
-    print("{} iterations ran".format(it))
-    best_child = max(root.children, key=lambda c: c.value / c.visits)
+    # Optionally prepare and print top-k rankings
+    if report_top_k is not None and report_top_k > 0 and root.children:
+        # compute stats for each child
+        def child_stats(child: MCTSNode):
+            visits = child.visits
+            amafvisits = child.amaf_visits
+            winrate = (child.value / visits) if visits > 0 else 0.0
+            ucb = root.ucb1(child, exploration)
+            mv = child.move
+            avg_move_count = (child.move_count_sum / amafvisits) if amafvisits > 0 else 0.0
+            min_move_count = (child.move_count_min+1) if child.move_count_min != float('inf') else 0
+            return {"move": (mv.x, mv.y), "visits": visits, "winrate": winrate, "ucb1": ucb, "avg_move_count": avg_move_count, "min_move_count": min_move_count}
+
+        children = list(root.children)
+        by_valuevisits = sorted(children, key=lambda c: c.value/c.visits, reverse=True)[:report_top_k]
+
+        print("MCTS rankings (Top {}) after {} iterations".format(report_top_k, it))
+        print("Top by winrate:")
+        for c in by_valuevisits:
+            s = child_stats(c)
+            print(f"  move={s['move']} visits={s['visits']} winrate={s['winrate']:.3f} ucb1={s['ucb1']:.3f} min={s['min_move_count']:.0f} avg={s['avg_move_count']:.1f}")
+
+    best_child = max(
+        root.children, 
+        key=lambda c: (
+            c.value / c.visits,  # primary: winrate (higher is better)
+            -c.move_count_min if c.move_count_min != float('inf') else 0  # secondary: shortest winning rollout
+        )
+    )
+    if instant_victory: return move
     return best_child.move
 
 
@@ -473,7 +585,7 @@ def mcts_search(
 # python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "G16Player2"
 
 # To run the analysis over 100 games (this took 2-3 hours for me):
-# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 100
+# python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
 
 
 class HexAgent(AgentBase):
@@ -484,19 +596,22 @@ class HexAgent(AgentBase):
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """
-        Swap on turn 2 otherwise use MCTS to select the move
+        Decide on a move to make given the current turn, board state, and opponent's last move.
+        Turn 1: Make a fair move to combat the swap rule.
+        Turn 2: Decide whether to swap based on opponent's first move.
+        Subsequent turns: Use MCTS to select the best move.
         """
 
-        # Always swap on turn 2
-        # TODO: add some smarter swap logic
-        # i turned this off so i didnt have to deal with the bug of the player's labels being wrong all the time
-        if turn == -1:
-            return Move(-1, -1)
+        if turn == 2:
+            if should_swap(board, opp_move):
+                return Move(-1, -1)
 
         chosen_move = mcts_search(
             root_board=board,
             my_colour=self.colour,
-            max_iterations=2000,  # max number of random plays
-            max_time_seconds=4,  # time limit per move
+            max_iterations=5000,          # max number of random plays
+            max_time_seconds=2,           # time limit per move
+            report_top_k=5,               # show top-5 for normal turns
+            root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
         )
         return chosen_move

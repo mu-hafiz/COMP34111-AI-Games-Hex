@@ -50,7 +50,7 @@ class Game:
 
     # the maximum time allocated for a match per player
     # 5 minutes in nanoseconds (min * s/min * ns/s)
-    MAXIMUM_TIME = 5 * 60 * 10**9
+    MAXIMUM_TIME = 100 * 60 * 10**9
     # 1 second in nanoseconds
     # MAXIMUM_TIME = 10**9
 
@@ -67,6 +67,7 @@ class Game:
         logDest: str | TextIO = sys.stderr,
         verbose: bool = False,
         silent: bool = False,
+        stats: list = [0,0]
     ):
         self._turn = 0  # current turn count
         self._board = Board(board_size)
@@ -75,6 +76,7 @@ class Game:
         self.has_swapped = False  # pie rule
         self.player1 = player1
         self.player2 = player2
+        self.stats = stats
 
         self.players = {
             Colour.RED: self.player1,
@@ -136,6 +138,7 @@ class Game:
             currentPlayer: Player = self.players[self.current_player]
             playerAgent = currentPlayer.agent
             logger.info(f"Turn {self.turn}: player {currentPlayer.name}")
+            logger.info(f"Running Score: {self.stats}")
             logger.info(f"Starting Board:\n{str(self.board)}")
             currentPlayer.turn += 1
 

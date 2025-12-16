@@ -100,6 +100,14 @@ if __name__ == "__main__":
 
         turnsPerGame = []
 
+        errors = {}
+        errors[args.player1Name] = 0
+        errors[args.player2Name] = 0
+
+        turnsPerError = {}
+        turnsPerError[args.player1Name] = []
+        turnsPerError[args.player2Name] = []
+
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
             print(f"GAME {game+1}:")
@@ -116,38 +124,64 @@ if __name__ == "__main__":
                 logDest=args.log,
                 verbose=args.verbose,
             )
-            g.run()
 
-            winner = g.players[g.current_player].name
-            turns = g.turn
-
-            wins[winner] += 1
-            turnsPerGame.append(turns)
-            turnsPerWin[winner].append(turns)
+            try:
+                g.run()
+            except KeyboardInterrupt:
+                print("Exiting...")
+                exit(-1)
+            except:
+                errorPlayer = g.players[Colour.opposite(g.current_player)].name
+                turns = g.turn
+                errors[winner] += 1
+                turnsPerGame.append(turns)
+                turnsPerError[winner].append(turns)
+            else:
+                winner = g.players[g.current_player].name
+                turns = g.turn
+                wins[winner] += 1
+                turnsPerGame.append(turns)
+                turnsPerWin[winner].append(turns)
+            
+            print("-----------------------------------------------------------------------------")
+            print("Running totals:")
+            print(f"Total Games: {game+1}\n")
+            print(f"{args.player1Name} ({args.player1}):")
+            print(f"Number of wins: {len(turnsPerWin[args.player1Name])}")
+            print(f"Number of errors: {len(turnsPerError[args.player1Name])}\n")
+            print(f"{args.player2Name} ({args.player2}):")
+            print(f"Number of wins: {len(turnsPerWin[args.player2Name])}")
+            print(f"Number of errors: {len(turnsPerError[args.player2Name])}\n")
 
 
         print("-----------------------------------------------------------------------------")
         print("FINAL RESULTS:\n")
         print(f"Total Games: {args.games}")
         print(f"Turns Per Game: {turnsPerGame}")
-        print(f"Average turns per game: {sum(turnsPerGame) / args.games}\n")
+        print(f"Average turns per game: {sum(turnsPerGame) / args.games}")
 
-        print(f"{args.player1Name} ({args.player1}):")
+        print(f"\n{args.player1Name} ({args.player1}):")
         print(f"Number of wins: {len(turnsPerWin[args.player1Name])}")
         if len(turnsPerWin[args.player1Name]) > 0:
             print(f"Turns Per Win: {turnsPerWin[args.player1Name]}")
             print(f"Quickest game: {min(turnsPerWin[args.player1Name])} turns")
             print(f"Slowest game: {max(turnsPerWin[args.player1Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}\n")
+            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}")
+        print(f"\nNumber of errors: {len(turnsPerError[args.player1Name])}")
+        if len(turnsPerError[args.player1Name]) > 0:
+            print(f"Turns Per Error: {turnsPerError[args.player1Name]}")
 
-        print(f"{args.player2Name} ({args.player2}):")
+        print(f"\n{args.player2Name} ({args.player2}):")
         print(f"Number of wins: {len(turnsPerWin[args.player2Name])}")
         if len(turnsPerWin[args.player2Name]) > 0:
             print(f"Turns Per Win: {turnsPerWin[args.player2Name]}")
             print(f"Quickest game: {min(turnsPerWin[args.player2Name])} turns")
             print(f"Slowest game: {max(turnsPerWin[args.player2Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}\n")
-    
+            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}")
+        print(f"\nNumber of errors: {len(turnsPerError[args.player2Name])}")
+        if len(turnsPerError[args.player2Name]) > 0:
+            print(f"Turns Per Error: {turnsPerError[args.player2Name]}")
+
     else:
         g = Game(
             player1=Player(
