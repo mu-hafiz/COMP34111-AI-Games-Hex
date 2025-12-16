@@ -10,6 +10,38 @@ from src.Colour import Colour
 from src.Move import Move
 from itertools import combinations
 
+DIRECTIONS = [
+    (-1, 0),
+    (1, 0),
+    (0, -1),
+    (0, 1),
+    (-1, 1),
+    (1, -1),
+]
+
+def generate_adjacent_tiles(board,colour):
+
+    # Take all of our tiles, combine that with our walls
+    # If any adjacent tiles to that tile are empty, that is an adjacent tile
+    # Return a list of all adjacent tiles
+    
+    our_moves = get_colour_moves(board,colour)
+    wall_list = setup_walls(colour)
+    legals = get_legal_moves(board)
+    all_tiles = our_moves+wall_list
+
+    adjacent_tiles = []
+
+    
+    for tile in all_tiles:
+        for direction in DIRECTIONS:
+            new_tile = Move(tile.x+direction[0],tile.y+direction[1])
+            adjacent_tiles.append(new_tile)
+
+    legal_adjacent_tiles = set(legals)&set(adjacent_tiles)
+    return list(legal_adjacent_tiles)
+
+    
 
 def setup_walls(colour):
     wall_list = []
@@ -31,6 +63,7 @@ def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
             if board.tiles[x][y].colour is colour:
                 moves.append(Move(x, y))
     return moves
+
 
 
 def identify_decision(information_set):
