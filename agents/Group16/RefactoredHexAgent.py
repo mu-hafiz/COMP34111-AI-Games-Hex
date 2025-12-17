@@ -122,7 +122,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
     return float("inf")
 
 
-def generate_adjacent_tiles(board, colour):
+def generate_adjacent_tiles(colour,board):
 
     # Take all of our tiles, combine that with our walls
     # If any adjacent tiles to that tile are empty, that is an adjacent tile
@@ -202,7 +202,7 @@ def identify_decision(information_set):
         "Play Best Fair Move",
         "Swap",
         "Central Move",
-        "Potential Connections",
+        "Potential Connections Plus Adjacent",
     ]
 
     # We just add things to this list as we go
@@ -225,7 +225,7 @@ def identify_decision(information_set):
             list_of_decisions.append("Central Move")
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
-        list_of_decisions.append("Potential Connections")
+        list_of_decisions.append("Potential Connections Plus Adjacent")
     if len(information_set["Lost Bridges"]) != 0 and information_set[
         "Opp Move"
     ] != Move(-1, -1):
@@ -288,7 +288,7 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Play Best Fair Move": get_fair_first_moves,
         "Swap": swap,
         "Central Move": central_move,
-        "Potential Connections": generate_potential_connections,
+        "Potential Connections Plus Adjacent": potential_connections_or_adjacent,
         "Defend": defend,
         "Win": win,
     }
@@ -297,7 +297,7 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Play Best Fair Move": [],
         "Swap": [],
         "Central Move": [board],
-        "Potential Connections": (colour, board),
+        "Potential Connections Plus Adjacent": (colour, board),
         "Defend": (bridges_lost, opp_move),
         "Win": [colour, board, new_current_bridges],
     }
@@ -316,6 +316,9 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
 
     return constraint_moveset(collection_of_movesets)
 
+def potential_connections_or_adjacent(colour,board):
+    combined_list = generate_potential_connections(colour,board) + generate_adjacent_tiles(colour,board)
+    return list(set(combined_list))
 
 def check_reach(colour, board, bridges):
     """
@@ -980,7 +983,7 @@ class RefactoredHexAgent(AgentBase):
                 root_board=board,
                 my_colour=self.colour,
                 max_iterations=5000,  # max number of random plays
-                max_time_seconds=2,  # time limit per move
+                max_time_seconds=0.8,  # time limit per move
                 report_top_k=1,  # show top-5 for normal turns
                 root_allowed_moves=move_set,
             )

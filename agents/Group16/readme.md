@@ -12,3 +12,4 @@ These are the different cases/stages of the game:
 5. Its our turn and the enemy has played a tile that is not threatening any of our existing strong connections. We can do mcts on a moveset of potential connections
 6. We are winning and should fill in our connections.
 7. We've run out of potential connections and none of the other cases apply, fall back to all legal moves and start again
+8. Remove enemy's bridges from any tile we consider playing
