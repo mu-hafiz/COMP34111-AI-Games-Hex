@@ -31,11 +31,11 @@ def prune_dead_cells(
     moves: list[Move],
     my_moves_to_win: float,
     opponent_moves_to_win: float,
-    my_colour: Colour,
+    player_to_move: Colour,
     ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
     
-    pot_cons = generate_potential_connections(my_colour,board)
+    pot_cons = generate_potential_connections(player_to_move,board)
 
 
     for move in moves:
@@ -44,7 +44,7 @@ def prune_dead_cells(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
                 board.tiles[row + dir_row][col + dir_col].colour
-                in (my_colour, Colour.opposite(my_colour))
+                in (player_to_move, Colour.opposite(player_to_move))
             )
             for dir_row, dir_col in DIRECTIONS
         )
@@ -58,10 +58,10 @@ def prune_dead_cells(
 
         original_cell_state = board.tiles[row][col].colour
 
-        apply_move(board, move, my_colour)
-        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
+        apply_move(board, move, player_to_move)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move)
         new_opponents_moves_to_win = calculate_moves_needed_to_win(
-            board, Colour.opposite(my_colour)
+            board, Colour.opposite(player_to_move)
         )
 
         board.tiles[row][col].colour = original_cell_state
@@ -968,7 +968,7 @@ def mcts_search(
                         node.untried_moves,
                         my_moves_to_win,
                         opponent_moves_to_win,
-                        my_colour,
+                        node.player_to_move,
                     )
 
                 # print(node.pruned_moves)
