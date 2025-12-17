@@ -73,6 +73,7 @@ def prune_dead_cells(
             remaining_moves.append((move, 2))
     
 
+
     if not remaining_moves:
         return [(move, 1) for move in moves]
     return remaining_moves 
@@ -970,6 +971,7 @@ def mcts_search(
                         my_colour,
                     )
 
+                # print(node.pruned_moves)
                 # move = random.choice(node.pruned_moves)
                 move = random.choices(
                     [move for move, _ in node.pruned_moves],
@@ -980,7 +982,7 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
             # If the node we picked wins in one move, play it
-            if node.is_terminal() and node.player_to_move == root.player_to_move:
+            if (node.is_terminal() or check_reach(node.player_to_move,node.board,generate_current_bridges(node.player_to_move,node.board))) and node.player_to_move == root.player_to_move:
                 instant_victory = move
                 return move
 
