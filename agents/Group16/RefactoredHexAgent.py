@@ -210,9 +210,9 @@ def identify_decision(information_set):
         "Defend",
         "Win",
         "Connect Weak Connection",
-        "Be Mean",
         "Play Best Fair Move",
         "Swap", 
+        "Be Mean",
         "Central Move",
         "Fill Weak Connections",
         "Potential Connections Plus Adjacent",
@@ -951,7 +951,7 @@ def mcts_search(
             node = root
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
-            while node.is_fully_expanded() and node.children and not node.is_terminal() and not check_reach(my_colour,node.board, generate_current_bridges(my_colour,node.board)):
+            while node.is_fully_expanded() and node.children and not node.is_terminal():
                 node = node.select_child(my_colour, exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
@@ -982,7 +982,7 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
             # If the node we picked wins in one move, play it
-            if (node.is_terminal() or check_reach(node.player_to_move,node.board,generate_current_bridges(node.player_to_move,node.board))) and node.player_to_move == root.player_to_move:
+            if node.is_terminal() and node.player_to_move == root.player_to_move:
                 instant_victory = move
                 return move
 
