@@ -31,12 +31,9 @@ def prune_dead_cells(
     moves: list[Move],
     my_moves_to_win: float,
     opponent_moves_to_win: float,
-    my_colour: Colour,
-    ) -> list[tuple[Move, int]]:
+    player_to_move: Colour,
+) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
-    
-
-
 
     for move in moves:
         row, col = move.x, move.y
@@ -44,7 +41,7 @@ def prune_dead_cells(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
                 board.tiles[row + dir_row][col + dir_col].colour
-                in (my_colour, Colour.opposite(my_colour))
+                in (player_to_move, Colour.opposite(player_to_move))
             )
             for dir_row, dir_col in DIRECTIONS
         )
@@ -55,10 +52,10 @@ def prune_dead_cells(
 
         original_cell_state = board.tiles[row][col].colour
 
-        apply_move(board, move, my_colour)
-        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
+        apply_move(board, move, player_to_move)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move)
         new_opponents_moves_to_win = calculate_moves_needed_to_win(
-            board, Colour.opposite(my_colour)
+            board, Colour.opposite(player_to_move)
         )
 
         board.tiles[row][col].colour = original_cell_state
@@ -68,11 +65,10 @@ def prune_dead_cells(
             or new_opponents_moves_to_win > opponent_moves_to_win
         ):
             remaining_moves.append((move, 2))
-    
 
     if not remaining_moves:
         return [(move, 1) for move in moves]
-    return remaining_moves 
+    return remaining_moves
 
 
 def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
@@ -963,7 +959,7 @@ def mcts_search(
                         node.untried_moves,
                         my_moves_to_win,
                         opponent_moves_to_win,
-                        my_colour,
+                        node.player_to_move,
                     )
 
                 # move = random.choice(node.pruned_moves)
