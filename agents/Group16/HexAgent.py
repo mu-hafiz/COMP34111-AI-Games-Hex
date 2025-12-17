@@ -615,3 +615,8 @@ class HexAgent(AgentBase):
             root_allowed_moves=get_fair_first_moves(board) if turn == 1 else None
         )
         return chosen_move
+
+
+"""
+:)
+"""
