@@ -64,6 +64,8 @@ def prune_dead_cells(
             or new_opponents_moves_to_win > opponent_moves_to_win
         ):
             remaining_moves.append((move, 2))
+    
+
     if not remaining_moves:
         return [(move, 1) for move in moves]
     return remaining_moves
@@ -130,7 +132,7 @@ def generate_adjacent_tiles(colour,board):
 
     our_moves = get_colour_moves(board, colour)
     wall_list = setup_walls(colour)
-    legals = get_legal_moves(board)
+    legals = get_legal_moves(board) # prune
     all_tiles = our_moves + wall_list
 
     adjacent_tiles = []
@@ -199,10 +201,14 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
+        "Connect Weak Connection",
+        "Be Mean",
         "Play Best Fair Move",
-        "Swap",
+        "Swap", 
         "Central Move",
+        "Fill Weak Connections",
         "Potential Connections Plus Adjacent",
+        "Help Ourselves",
     ]
 
     # We just add things to this list as we go
@@ -226,6 +232,10 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections Plus Adjacent")
+        list_of_decisions.append("Help Ourselves")
+        
+
+        
     if len(information_set["Lost Bridges"]) != 0 and information_set[
         "Opp Move"
     ] != Move(-1, -1):
@@ -236,7 +246,16 @@ def identify_decision(information_set):
     ):
         list_of_decisions.append("Win")
 
+    if len(generate_weak_connections(information_set["Colour"],information_set["Board"])) > 0:
+        list_of_decisions.append("Fill Weak Connections")
+
     # print(list_of_decisions)
+
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
+        # If the enemy wins before us
+        list_of_decisions.append("Be Mean")
+        # Fuck him up
+    
 
     """
     Determine priority
@@ -246,6 +265,26 @@ def identify_decision(information_set):
     # just return the first thing we think of doing for now
     print(list_of_decisions)
     return list_of_decisions
+
+def generate_weak_connections(colour, board):
+    adjacents = generate_adjacent_tiles(colour,board)
+    
+    before = calculate_moves_needed_to_win(board,colour)
+
+    move_set = []
+
+    for tile in adjacents:
+        board_copy = clone_board(board)
+        board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
+        after = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+        if before < after:
+            #shit
+            move_set.append(tile)
+            
+    adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
+    current_bridges = set(generate_current_bridges(colour,board))
+    return list((set(adjacents) & set(move_set)).difference(current_bridges))
+
 
 
 def execution_flow(old_current_bridges, turn, colour, board, opp_move):
@@ -291,15 +330,21 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Potential Connections Plus Adjacent": potential_connections_or_adjacent,
         "Defend": defend,
         "Win": win,
+        "Help Ourselves" : help_ourselves,
+        "Be Mean": generate_disrupting_moves,
+        "Fill Weak Connections": generate_weak_connections,
+
     }
     function_parameters = {
-        # We dont know how to not give parameters this way, dont question it
         "Play Best Fair Move": [],
         "Swap": [],
         "Central Move": [board],
         "Potential Connections Plus Adjacent": (colour, board),
         "Defend": (bridges_lost, opp_move),
         "Win": [colour, board, new_current_bridges],
+        "Help Ourselves": (colour, board),
+        "Be Mean": (colour, board),
+        "Fill Weak Connections": (colour, board),
     }
 
     # When we consider all of the constraints that exist inside of decisions
@@ -314,7 +359,78 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         move_set = execution_flow_dict[constraint](*function_parameters[constraint])
         collection_of_movesets.append(set(move_set))
 
-    return constraint_moveset(collection_of_movesets)
+    """
+    Regardles
+    """
+
+    filtered_constraints,constraint_count = constraint_moveset(collection_of_movesets,colour,board)
+    print(set_of_constraints[:constraint_count+1])
+
+    return filtered_constraints
+
+
+def generate_potential_reach(colour, board):
+    """
+    Generates potential connections
+    Iterates through them, adding them to the board one by one, WITHOUT filling in bridges
+    Returns a set of tiles that the chosen colour player can reach by adding potential connections
+    """
+
+
+
+    current_expansion = generate_potential_connections()
+    # add this to our current boardstate
+
+    for connection in current_expansion:
+        board.tiles[connection.x][connection.y].colour = colour
+    
+    return board
+
+
+
+
+def help_ourselves(colour,board):
+    """
+    this is not done whatsoever
+    Find all moves that decrease our shortest path to win
+    """
+    legals = get_legal_moves(board)
+    potential_connections = generate_potential_connections(colour,board) 
+    board_copy = clone_board(board)
+    current_needed = calculate_moves_needed_to_win(board,colour)
+    move_set = []
+
+    for move in legals:
+        board_copy.tiles[move.x][move.y].colour = colour
+        change = current_needed - calculate_moves_needed_to_win(board_copy,colour)
+        if change > 0:
+            # That move is productive
+            move_set.append(move)
+
+    return move_set
+
+
+
+
+def generate_disrupting_moves(colour,board):
+    """
+    Find all moves that increase our enemy's shortest path to win
+    """
+    legals = get_legal_moves(board) 
+    board_copy = clone_board(board)
+    current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+    move_set = []
+
+    for move in legals:
+        board_copy.tiles[move.x][move.y].colour = colour
+        change = current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
+        if change < 0:
+            # That move is productive for us (bad for enemy)
+            move_set.append(move)
+
+
+    return move_set
+
 
 def potential_connections_or_adjacent(colour,board):
     combined_list = generate_potential_connections(colour,board) + generate_adjacent_tiles(colour,board)
@@ -370,13 +486,27 @@ def defend(bridges_lost, opp_move):
     return opposite_list
 
 
-def constraint_moveset(movesets):
+def constraint_moveset(movesets: list[set],colour,board):
+    # Current is a singular set containing our least constrained and most important moveset
     current = movesets[0]
+
+    """
+    Here, we need to augment current so that current doesn't have any pruned moves in it regardless of our least thresholded values
+    We want to remove the enemy's bridges from current
+
+    """
+
+
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
+    enemy_bridges = set(enemy_bridges)
+    current = set(current).difference(set(enemy_bridges))
+
     for move_set in movesets:
         if len(current & move_set) == 0:
-            return list(current)
+
+            return (list(current),movesets.index(move_set))
         current = current & move_set
-    return current
+    return (current,1)
 
 
 def swap():
@@ -437,6 +567,27 @@ def get_fair_first_moves():
             candidates.add(Move(x, size - 1))
 
     return candidates
+
+def generate_OP_connections(colour,board):
+
+    """
+    deprecated, cant make use of it, remove eventually
+    """
+
+    wall_list = setup_walls(colour)
+
+    # We want a list of our tiles
+    our_tiles = get_colour_moves(board, colour) + wall_list
+
+    potential_connections = []
+
+    # For each tile
+    for tile in our_tiles:
+        potential_connections += cardinal_dirs(tile, wall_list, None, board)
+    
+    
+    return list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
+
 
 
 def generate_potential_connections(colour, board):
@@ -569,6 +720,8 @@ def allocate_thinking_time(time_used, move_number, max_time, max_moves=100, C=20
     remaining_time = max_time - time_used
     return remaining_time / (C + max(max_moves - move_number, 0))
 
+
+
 class MCTSNode:
     """
     A node in the MCTS tree.
@@ -596,7 +749,7 @@ class MCTSNode:
         self.move = move
 
         self.children: list[MCTSNode] = []
-        self.untried_moves: list[Move] = get_legal_moves(board)
+        self.untried_moves: list[Move] = get_legal_moves(board) 
         self.visits: int = 0
         self.value: float = 0.0
 
@@ -607,6 +760,8 @@ class MCTSNode:
         self.move_count_min: float = float("inf")  # NEW: track minimum rollout length
 
         self.pruned_moves: list[tuple[Move, int]] | None = None
+
+
 
     def is_fully_expanded(self) -> bool:
         if self.pruned_moves is not None:
@@ -716,7 +871,7 @@ def play_from_node_S(
     rollout_moves = set()
 
     while True:
-        legal_moves = get_legal_moves(board)
+        legal_moves = get_legal_moves(board) 
         if not legal_moves:
             # Shouldn't happen in real Hex, but safe:
             return (0.0, rollout_moves)
@@ -734,15 +889,6 @@ def play_from_node_S(
 
         current_player = Colour.opposite(current_player)
 
-
-def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
-    """Get a list of all the empty tiles on the board."""
-    moves: list[Move] = []
-    for x in range(11):
-        for y in range(11):
-            if board.tiles[x][y].colour is colour:
-                moves.append(Move(x, y))
-    return moves
 
 
 def mcts_search(
@@ -826,7 +972,7 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
             # If the node we picked wins in one move, play it
-            if node.is_terminal():
+            if node.is_terminal() and node.player_to_move == root.player_to_move:
                 instant_victory = move
                 return move
 
@@ -847,7 +993,13 @@ def mcts_search(
     # After search: pick child with the most visits
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
-        legal_moves = get_legal_moves(root_board)
+
+        """
+        I'm just trying to improve the way the function acts when it's desperate
+        Slightly prune the moves we play to be just non bridges IF we can, else game is lost and play any legal move
+        """
+
+        legal_moves = get_legal_moves(root_board) # prune
         return random.choice(legal_moves)
     # Optionally prepare and print top-k rankings
     if report_top_k is not None and report_top_k > 0 and root.children:
@@ -902,7 +1054,7 @@ def mcts_search(
     return best_child.move
 
 
-def cardinal_dirs(current_tile: Move, walls, flag, board):
+def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     """
     Calculate all possible strong connections from a given tile
     We want to calculate POTENTIAL connections and EXISTING connections now
@@ -930,12 +1082,22 @@ def cardinal_dirs(current_tile: Move, walls, flag, board):
     legals = get_legal_moves(board)
     if flag:
         our_moves = get_colour_moves(board, flag)
+        if special_case:
+            combined_list = our_moves + legals
     result = []
 
     if flag == None:
         for triplet in dirs.values():
             if triplet[0] in legals and triplet[1] in legals and triplet[2] in legals:
                 result.append(triplet[-1])
+    elif special_case:
+        # This is for the case where we're trying to figure out how many potential connections we need to win the game
+        # In this case, we are trying to figure out what potential connections we can utilise
+        # Whether we have them already or they're blocked by our own tiles
+        # Return the endpoint, we can access it in one move regardless
+        for triplet in dirs.values():
+            if triplet[0] in combined_list and triplet[1] in combined_list and triplet[2] in combined_list:
+                return triplet[2] 
     else:
         for triplet in dirs.values():
             if triplet[0] in legals and triplet[1] in legals:
@@ -981,6 +1143,8 @@ class RefactoredHexAgent(AgentBase):
             execution_flow(self.current_bridges, turn, self.colour, board, opp_move)
         )
 
+        print(move_set)
+
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
@@ -994,7 +1158,7 @@ class RefactoredHexAgent(AgentBase):
                 my_colour=self.colour,
                 max_iterations=1000000,          # max number of random plays
                 max_time_seconds=thinking_time,  # time limit per move
-                report_top_k=1,               # show top-5 for normal turns
+                report_top_k=5,               # show top-5 for normal turns
                 root_allowed_moves=move_set
             )
 
@@ -1029,48 +1193,6 @@ class RefactoredHexAgent(AgentBase):
 
 
 """
-Hex agent but it actually works this time
-Heres Sasha's plan:
-
-These are the different cases/stages of the game:
-1. Its the start of the game and we are red so we use a fair first moveset and do mcts on that.
-2. Its the second turn of the game and we are blue so we need to check if we want to swap reds move by checking if it falls inside the 'winning' region.
-    a. If it does we swap and we are now red.
-    b. If it doesnt we dont swap and we remain blue and we need to play a good starting move. I currently dont know what the moveset should be but making a 
-       connection with a wall seems good for now.
-3. Its the third turn of the game and we were red but then we got swapped so we are blue and have no tiles on the board. Same idea as case 2b we need to make a good move.
-4. Its our turn and the enemy has played a tile that threatens one of our  existing strong connections. We have to defend ourselves and take the other side of the connection.
-    a. It is a simple formation and the enemy's move only disrupts one of our connections so we automatically select to play the other side of the connection.
-    b. It is a complex formation and the enemy's move disrupts multiple connections. We run mcts on a movese of defensive plays to find the best one.
-5. Its our turn and the enemy has played a tile that is not threatening any of our existing strong connections. We can do mcts on a moveset of potential connections
-6. We are winning and should fill in our connections.
-
-
-can we combine movesets if multiple cases occur???? run mcts on the lot. itll decide what was best to do in that situation 
-
-
-Note: 
-Some cases can occur at the same time
-its third turn, enemy didnt swap, enemy couldve fucked up a connection we had to the wall = defense time!!!
-we are winning and enemy fucked up connection = defense time!!!
-if enemy didnt fuck up connection and we are winning then just do the winning thing
-if enemy 
-
-"""
-
-"""
-Keep track of the previous current bridges to compare against the new one.
-Start of the go generate a new bridges and pot cons 
-current bridges should be stored as a list of tuples where each tuple is the two bridges??? maybe this makes things cleaner.
-(pair1, pair2)
-Pot cons can be dict like it was. the value at least matches the pairs in bcurrent bridges now
-"""
-
-
-"""
-What we do each turn:
-1. get our current bridges and pot cons
-2. go through the cases
 
 
 AWESOME NEW THINGS WE CAN DO BY MAKING MULTIPLE DECISIONS THAT CONSTRAIN MOVESET AND THEN FINDING THE MOVES THAT SATISFY THE MOST CONSTRAINTS 
