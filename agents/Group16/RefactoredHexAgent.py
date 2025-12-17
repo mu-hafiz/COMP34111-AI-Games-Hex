@@ -32,8 +32,12 @@ def prune_dead_cells(
     my_moves_to_win: float,
     opponent_moves_to_win: float,
     my_colour: Colour,
-) -> list[tuple[Move, int]]:
+    ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
+    
+
+
+
     for move in moves:
         row, col = move.x, move.y
         is_adjacent_to_any_stone = any(
@@ -68,7 +72,7 @@ def prune_dead_cells(
 
     if not remaining_moves:
         return [(move, 1) for move in moves]
-    return remaining_moves
+    return remaining_moves 
 
 
 def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
@@ -232,7 +236,7 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections Plus Adjacent")
-        list_of_decisions.append("Help Ourselves")
+        #list_of_decisions.append("Help Ourselves")
         
 
         
@@ -396,11 +400,11 @@ def help_ourselves(colour,board):
     """
     legals = get_legal_moves(board)
     potential_connections = generate_potential_connections(colour,board) 
-    board_copy = clone_board(board)
     current_needed = calculate_moves_needed_to_win(board,colour)
     move_set = []
 
     for move in legals:
+        board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
         change = current_needed - calculate_moves_needed_to_win(board_copy,colour)
         if change > 0:
@@ -417,11 +421,11 @@ def generate_disrupting_moves(colour,board):
     Find all moves that increase our enemy's shortest path to win
     """
     legals = get_legal_moves(board) 
-    board_copy = clone_board(board)
     current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour))
     move_set = []
 
     for move in legals:
+        board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
         change = current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
         if change < 0:
@@ -1176,7 +1180,7 @@ class RefactoredHexAgent(AgentBase):
 # Red
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
 # Blue
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "G16"
+# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "Group16"
 
 # Agent VS Agent
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "G16Player2"
@@ -1191,6 +1195,9 @@ class RefactoredHexAgent(AgentBase):
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
 # python3 Hex.py -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "Group16" -p1 "agents.Human.HumanPlayer HumanPlayer" -p1Name "Human"
 
+
+#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"  
+#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"
 
 """
 

@@ -444,8 +444,7 @@ def mcts_search(
         # keep only allowed moves in root.untried_moves
         root.untried_moves = [m for m in root.untried_moves if (m.x, m.y) in root_allowed_moves]
         # pre-expand each allowed move as a child so the search distributes sims among them
-        for move in list(root.untried_moves):
-            root.add_child(move)
+
 
     start_time = time.perf_counter()
     it = 0
