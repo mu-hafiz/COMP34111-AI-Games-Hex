@@ -35,7 +35,7 @@ def prune_dead_cells(
     ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
     
-
+    pot_cons = generate_potential_connections(my_colour,board)
 
 
     for move in moves:
@@ -51,6 +51,9 @@ def prune_dead_cells(
 
         if is_adjacent_to_any_stone:
             remaining_moves.append((move, 1))
+            continue
+        if move in pot_cons:
+            remaining_moves.append((move, 2))
             continue
 
         original_cell_state = board.tiles[row][col].colour
@@ -257,7 +260,8 @@ def identify_decision(information_set):
 
     if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
-        list_of_decisions.append("Be Mean")
+        if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
+            list_of_decisions.append("Be Mean")
         # Fuck him up
     
 
@@ -280,7 +284,7 @@ def generate_weak_connections(colour, board):
     for tile in adjacents:
         board_copy = clone_board(board)
         board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
-        after = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+        after = calculate_moves_needed_to_win(board_copy,colour)
         if before < after:
             #shit
             move_set.append(tile)
@@ -946,7 +950,7 @@ def mcts_search(
             node = root
 
             # 1) SELECTION: move down while node is fully expanded and not terminal
-            while node.is_fully_expanded() and node.children and not node.is_terminal():
+            while node.is_fully_expanded() and node.children and not node.is_terminal() and not check_reach(my_colour,node.board, generate_current_bridges(my_colour,node.board)):
                 node = node.select_child(my_colour, exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
