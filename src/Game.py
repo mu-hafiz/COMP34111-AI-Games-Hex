@@ -76,7 +76,6 @@ class Game:
         self.has_swapped = False  # pie rule
         self.player1 = player1
         self.player2 = player2
-        self.stats = stats
 
         self.players = {
             Colour.RED: self.player1,
@@ -138,7 +137,6 @@ class Game:
             currentPlayer: Player = self.players[self.current_player]
             playerAgent = currentPlayer.agent
             logger.info(f"Turn {self.turn}: player {currentPlayer.name}")
-            logger.info(f"Running Score: {self.stats}")
             logger.info(f"Starting Board:\n{str(self.board)}")
             currentPlayer.turn += 1
 

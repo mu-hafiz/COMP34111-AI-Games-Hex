@@ -565,6 +565,9 @@ def should_swap(board: Board, opp_move: Move) -> bool:
 
     return False
 
+def allocate_thinking_time(time_used, move_number, max_time, max_moves=100, C=20):
+    remaining_time = max_time - time_used
+    return remaining_time / (C + max(max_moves - move_number, 0))
 
 class MCTSNode:
     """
@@ -959,7 +962,8 @@ class RefactoredHexAgent(AgentBase):
         # Old: Move : List[Move]
         # New: List(Tuple(Move,Move))
         self.current_bridges = []
-
+        self.time_spent = 0
+        
         super().__init__(colour)
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
@@ -969,6 +973,10 @@ class RefactoredHexAgent(AgentBase):
         Turn 2: Decide whether to swap based on opponent's first move.
         Subsequent turns: Use MCTS to select the best move.
         """
+        print(f"Total Time: {self.time_spent}")
+
+        start_time = time.perf_counter()
+
         move_set = list(
             execution_flow(self.current_bridges, turn, self.colour, board, opp_move)
         )
@@ -979,16 +987,22 @@ class RefactoredHexAgent(AgentBase):
             # Don't bother checking others (case where hand is forced)
         else:
             # Otherwise, try to figure out which move is our best move
+            thinking_time = allocate_thinking_time(self.time_spent, turn, 300)
+            print(f"Thinking time for this turn: {thinking_time}")
             chosen_move = mcts_search(
                 root_board=board,
                 my_colour=self.colour,
-                max_iterations=5000,  # max number of random plays
-                max_time_seconds=0.8,  # time limit per move
-                report_top_k=1,  # show top-5 for normal turns
-                root_allowed_moves=move_set,
+                max_iterations=1000000,          # max number of random plays
+                max_time_seconds=thinking_time,  # time limit per move
+                report_top_k=1,               # show top-5 for normal turns
+                root_allowed_moves=move_set
             )
 
-        self.current_bridges = generate_current_bridges(self.colour, board, chosen_move)
+        self.current_bridges = generate_current_bridges(self.colour,board,chosen_move)
+
+        end_time = time.perf_counter()
+        self.time_spent += end_time - start_time
+
         return chosen_move
 
 

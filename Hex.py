@@ -108,6 +108,10 @@ if __name__ == "__main__":
         turnsPerError[args.player1Name] = []
         turnsPerError[args.player2Name] = []
 
+        timePerGame = {}
+        timePerGame[args.player1Name] = []
+        timePerGame[args.player2Name] = []
+
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
             print(f"GAME {game+1}:")
@@ -142,6 +146,13 @@ if __name__ == "__main__":
                 wins[winner] += 1
                 turnsPerGame.append(turns)
                 turnsPerWin[winner].append(turns)
+            finally:
+                winner = g.players[g.current_player].name
+                winnerTime = g.players[g.current_player].move_time
+                loser = g.players[Colour.opposite(g.current_player)].name
+                loserTime = g.players[Colour.opposite(g.current_player)].move_time
+                timePerGame[winner].append(winnerTime)
+                timePerGame[loser].append(loserTime)
             
             print("-----------------------------------------------------------------------------")
             print("Running totals:")
@@ -156,31 +167,39 @@ if __name__ == "__main__":
 
         print("-----------------------------------------------------------------------------")
         print("FINAL RESULTS:\n")
-        print(f"Total Games: {args.games}")
-        print(f"Turns Per Game: {turnsPerGame}")
-        print(f"Average turns per game: {sum(turnsPerGame) / args.games}")
+        print(f"   Total Games: {args.games}")
+        print(f"   Turns Per Game: {turnsPerGame}")
+        print(f"   Average turns per game: {sum(turnsPerGame) / args.games}")
 
-        print(f"\n{args.player1Name} ({args.player1}):")
-        print(f"Number of wins: {len(turnsPerWin[args.player1Name])}")
+        print("\n-----------------------------------------------------------------------------")
+        print(f"{args.player1Name} ({args.player1}):\n")
+        print(f"   Number of wins: {len(turnsPerWin[args.player1Name])}")
         if len(turnsPerWin[args.player1Name]) > 0:
-            print(f"Turns Per Win: {turnsPerWin[args.player1Name]}")
-            print(f"Quickest game: {min(turnsPerWin[args.player1Name])} turns")
-            print(f"Slowest game: {max(turnsPerWin[args.player1Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}")
-        print(f"\nNumber of errors: {len(turnsPerError[args.player1Name])}")
+            print(f"   Turns Per Win: {turnsPerWin[args.player1Name]}")
+            print(f"   Quickest game: {min(turnsPerWin[args.player1Name])} turns")
+            print(f"   Slowest game: {max(turnsPerWin[args.player1Name])} turns")
+            print(f"   Average Turns Per Win: {sum(turnsPerWin[args.player1Name]) / len(turnsPerWin[args.player1Name])}")
+        print(f"\n   Time used per game: {timePerGame[args.player1Name]}")
+        print(f"   Average time used per game: {round((sum(timePerGame[args.player1Name]) / len(timePerGame[args.player1Name]))/1000000000, 8)}s")
+        print(f"   Average time used per turn: {round((sum(timePerGame[args.player1Name]) / (sum(turnsPerGame) / 2))/1000000000, 8)}s")
+        print(f"\n   Number of errors: {len(turnsPerError[args.player1Name])}")
         if len(turnsPerError[args.player1Name]) > 0:
-            print(f"Turns Per Error: {turnsPerError[args.player1Name]}")
+            print(f"   Turns Per Error: {turnsPerError[args.player1Name]}")
 
-        print(f"\n{args.player2Name} ({args.player2}):")
-        print(f"Number of wins: {len(turnsPerWin[args.player2Name])}")
+        print("\n-----------------------------------------------------------------------------")
+        print(f"{args.player2Name} ({args.player2}):\n")
+        print(f"   Number of wins: {len(turnsPerWin[args.player2Name])}")
         if len(turnsPerWin[args.player2Name]) > 0:
-            print(f"Turns Per Win: {turnsPerWin[args.player2Name]}")
-            print(f"Quickest game: {min(turnsPerWin[args.player2Name])} turns")
-            print(f"Slowest game: {max(turnsPerWin[args.player2Name])} turns")
-            print(f"Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}")
-        print(f"\nNumber of errors: {len(turnsPerError[args.player2Name])}")
+            print(f"   Turns Per Win: {turnsPerWin[args.player2Name]}")
+            print(f"   Quickest game: {min(turnsPerWin[args.player2Name])} turns")
+            print(f"   Slowest game: {max(turnsPerWin[args.player2Name])} turns")
+            print(f"   Average Turns Per Win: {sum(turnsPerWin[args.player2Name]) / len(turnsPerWin[args.player2Name])}")
+        print(f"\n   Time used per game: {timePerGame[args.player2Name]}")
+        print(f"   Average time used per game: {round((sum(timePerGame[args.player2Name]) / len(timePerGame[args.player2Name]))/1000000000, 8)}s")
+        print(f"   Average time used per turn: {round((sum(timePerGame[args.player2Name]) / (sum(turnsPerGame) / 2))/1000000000, 8)}s")
+        print(f"\n   Number of errors: {len(turnsPerError[args.player2Name])}")
         if len(turnsPerError[args.player2Name]) > 0:
-            print(f"Turns Per Error: {turnsPerError[args.player2Name]}")
+            print(f"   Turns Per Error: {turnsPerError[args.player2Name]}")
 
     else:
         g = Game(
