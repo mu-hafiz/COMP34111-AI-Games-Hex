@@ -42,6 +42,7 @@ def rollout_policy(
     return random.choices(moves, weights=weights)[0]
 
 
+
 def in_bounds(board: Board, row: int, col: int):
     board_size = board.size
     return 0 <= row < board_size and 0 <= col < board_size
@@ -226,6 +227,8 @@ def identify_decision(information_set):
         explanation - 
     """
 
+
+
     # Priority ranking of our decisions, lower index = higher priority
     priority_list = [
         "Defend",
@@ -239,6 +242,9 @@ def identify_decision(information_set):
         "Potential Connections Plus Adjacent",
         "Help Ourselves",
     ]
+
+
+
 
     # We just add things to this list as we go
     list_of_decisions = []
@@ -284,7 +290,6 @@ def identify_decision(information_set):
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
-        # Fuck him up
 
     """
     Determine priority
@@ -293,7 +298,7 @@ def identify_decision(information_set):
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
-    print("I think it takes that fucker ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
+    print("I think it takes that guy ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
     print("I think it takes ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]))," tiles to win")
     return list_of_decisions
 
@@ -309,7 +314,6 @@ def generate_weak_connections(colour, board):
         board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
         after = calculate_moves_needed_to_win(board_copy,colour)
         if before < after:
-            #shit
             move_set.append(tile)
             
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
@@ -330,6 +334,9 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         str : corresponding function for decision
         }
     """
+
+
+
 
     # Generate our current information
     new_current_bridges = generate_current_bridges(colour, board)
@@ -355,29 +362,19 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
     }
     set_of_constraints = identify_decision(information_set)
 
-    execution_flow_dict = {
-        "Play Best Fair Move": get_fair_first_moves,
-        "Swap": swap,
-        "Central Move": central_move,
-        "Potential Connections Plus Adjacent": potential_connections_or_adjacent,
-        "Defend": defend,
-        "Win": win,
-        "Help Ourselves" : help_ourselves,
-        "Be Mean": generate_disrupting_moves,
-        "Fill Weak Connections": generate_weak_connections,
 
+    execution_flow_dict = {
+        "Play Best Fair Move":lambda:  get_fair_first_moves(),
+        "Swap": lambda: swap(),
+        "Central Move": lambda: central_move(board),
+        "Potential Connections Plus Adjacent":lambda: potential_connections_or_adjacent(colour, board),
+        "Defend": lambda: defend(bridges_lost, opp_move),
+        "Win": lambda: win(colour, board, new_current_bridges),
+        "Help Ourselves" :lambda:  (colour, board),
+        "Be Mean": lambda: generate_disrupting_moves(colour, board),
+        "Fill Weak Connections":lambda: generate_weak_connections(colour, board),
     }
-    function_parameters = {
-        "Play Best Fair Move": [],
-        "Swap": [],
-        "Central Move": [board],
-        "Potential Connections Plus Adjacent": (colour, board),
-        "Defend": (bridges_lost, opp_move),
-        "Win": [colour, board, new_current_bridges],
-        "Help Ourselves": (colour, board),
-        "Be Mean": (colour, board),
-        "Fill Weak Connections": (colour, board),
-    }
+
 
     # When we consider all of the constraints that exist inside of decisions
     # We can do one of two things logically
@@ -388,7 +385,7 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
     collection_of_movesets = []
 
     for constraint in set_of_constraints:
-        move_set = execution_flow_dict[constraint](*function_parameters[constraint])
+        move_set = execution_flow_dict[constraint]()
         collection_of_movesets.append(set(move_set))
 
     """
