@@ -105,11 +105,13 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
             queue.append((row, col))
         SINKS = {(row, board_size-1) for row in range(board_size)}
 
+    best = float("inf")
     while queue:
         row, col = queue.popleft()
 
         if (row, col) in SINKS:
-            return costs_matrix[row][col]
+            best = min(best,costs_matrix[row][col])
+            
 
         for dir_row, dir_col in DIRECTIONS:
             new_row, new_col = row + dir_row, col + dir_col
@@ -129,7 +131,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                     queue.appendleft((new_row, new_col))
                 else:
                     queue.append((new_row, new_col))
-    return float("inf")
+    return best
 
 
 def generate_adjacent_tiles(colour,board):
@@ -211,10 +213,10 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
+        "Be Mean",
         "Connect Weak Connection",
         "Play Best Fair Move",
         "Swap", 
-        "Be Mean",
         "Central Move",
         "Fill Weak Connections",
         "Potential Connections Plus Adjacent",
@@ -242,7 +244,7 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections Plus Adjacent")
-        list_of_decisions.append("Help Ourselves")
+        #list_of_decisions.append("Help Ourselves")
         
 
         
@@ -262,10 +264,10 @@ def identify_decision(information_set):
     # Decide how mean we want to be
     if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
+                
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
         # Fuck him up
-    
 
     """
     Determine priority
@@ -274,6 +276,8 @@ def identify_decision(information_set):
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
+    print("I think it takes that fucker ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
+    print("I think it takes ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]))," tiles to win")
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
@@ -427,15 +431,19 @@ def generate_disrupting_moves(colour,board):
     """
     Find all moves that increase our enemy's shortest path to win
     """
-    legals = get_legal_moves(board) 
-    current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+    legals = get_legal_moves(board)
+
+    enemy_current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+    our_current_needed = calculate_moves_needed_to_win(board,colour)
+    
     move_set = []
 
     for move in legals:
         board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
-        change = current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
-        if change < 0:
+        enemy_change = enemy_current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
+        our_change = our_current_needed - calculate_moves_needed_to_win(board_copy,colour)
+        if (enemy_change < 0) or (our_change > 0) :
             # That move is productive for us (bad for enemy)
             move_set.append(move)
 
@@ -729,6 +737,10 @@ def should_swap(board: Board, opp_move: Move) -> bool:
     return False
 
 def allocate_thinking_time(time_used, move_number, max_time, max_moves=100, C=20):
+
+    # If we're losing, we should really think more to be honest
+    # Just in general, we should evaluate this with respect to the boardstate
+
     remaining_time = max_time - time_used
     return remaining_time / (C + max(max_moves - move_number, 0))
 
@@ -1019,6 +1031,7 @@ def mcts_search(
 
         legal_moves = get_legal_moves(root_board) # prune
         return random.choice(legal_moves)
+    children = list(root.children)
     # Optionally prepare and print top-k rankings
     if report_top_k is not None and report_top_k > 0 and root.children:
         # compute stats for each child
@@ -1045,7 +1058,6 @@ def mcts_search(
                 "min_move_count": min_move_count,
             }
 
-        children = list(root.children)
         by_valuevisits = sorted(
             children, key=lambda c: c.value / c.visits, reverse=True
         )[:report_top_k]
@@ -1139,6 +1151,8 @@ class RefactoredHexAgent(AgentBase):
 
         # Old: Move : List[Move]
         # New: List(Tuple(Move,Move))
+        self.MCTS_thinking_time = 0
+        self.execution_flow_thinking_time = 0
         self.current_bridges = []
         self.time_spent = 0
         
@@ -1151,38 +1165,58 @@ class RefactoredHexAgent(AgentBase):
         Turn 2: Decide whether to swap based on opponent's first move.
         Subsequent turns: Use MCTS to select the best move.
         """
-        print(f"Total Time: {self.time_spent}")
 
-        start_time = time.perf_counter()
-
+        executing_time_start = time.perf_counter()
         move_set = list(
             execution_flow(self.current_bridges, turn, self.colour, board, opp_move)
         )
+        executing_time_end = time.perf_counter()
+        time_spent_executing = executing_time_end-executing_time_start
+        self.execution_flow_thinking_time += time_spent_executing
 
-        print(move_set)
+        print("-------")
+        print("Time spent executing",time_spent_executing)
+        print("Time spent executing this game",self.execution_flow_thinking_time)
+        print("-------")
 
+        self.time_spent += time_spent_executing
+        
+        searching_time_start = time.perf_counter()
+        searching_time = allocate_thinking_time(self.time_spent, turn, 300)
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
+            print("These were my only options",move_set)
+            searching_time = 0 # Case where we didnt even have to think
             # Don't bother checking others (case where hand is forced)
         else:
             # Otherwise, try to figure out which move is our best move
-            thinking_time = allocate_thinking_time(self.time_spent, turn, 300)
-            print(f"Thinking time for this turn: {thinking_time}")
+
+            print(f"Allocated thinking time for this turn: {searching_time}")
+
             chosen_move = mcts_search(
                 root_board=board,
                 my_colour=self.colour,
                 max_iterations=1000000,          # max number of random plays
-                max_time_seconds=thinking_time,  # time limit per move
-                report_top_k=5,               # show top-5 for normal turns
+                max_time_seconds=searching_time,  # time limit per move
+                report_top_k=None,               # show top-5 for normal turns
                 root_allowed_moves=move_set
             )
 
+        
+        searching_time_end = time.perf_counter()
+        time_spent_searching = searching_time_end - searching_time_start
+        self.MCTS_thinking_time += time_spent_searching
+        print("It took ",time_spent_searching, "to run MCTS for this move")
+        print("I was allowed a total of ",self.MCTS_thinking_time,"for MCTS searching this game (via time management)")
+        self.time_spent += time_spent_searching
+
+        print(f"Total Time: {self.time_spent}")
+
         self.current_bridges = generate_current_bridges(self.colour,board,chosen_move)
-
-        end_time = time.perf_counter()
-        self.time_spent += end_time - start_time
-
+        # Instead of checking time per move and comparing it each turn
+        # We check the time spent from the beginning of the game to the very instant that we try to allocate time to the searching algo
+        # Via an attribute
         return chosen_move
 
 
