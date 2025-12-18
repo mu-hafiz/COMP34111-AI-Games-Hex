@@ -112,7 +112,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                 0 if board.tiles[row][col].colour == player_to_move else 1
             )
             queue.append((row, col))
-        SINKS = {(board_size-1, col) for col in range(board_size)}
+        SINKS = {(board_size - 1, col) for col in range(board_size)}
     else:
         for row in range(board_size):
             col = 0
@@ -122,15 +122,13 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                 0 if board.tiles[row][col].colour == player_to_move else 1
             )
             queue.append((row, col))
-        SINKS = {(row, board_size-1) for row in range(board_size)}
+        SINKS = {(row, board_size - 1) for row in range(board_size)}
 
-    best = float("inf")
     while queue:
         row, col = queue.popleft()
 
         if (row, col) in SINKS:
-            best = min(best,costs_matrix[row][col])
-            
+            return costs_matrix[row][col]
 
         for dir_row, dir_col in DIRECTIONS:
             new_row, new_col = row + dir_row, col + dir_col
@@ -150,7 +148,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                     queue.appendleft((new_row, new_col))
                 else:
                     queue.append((new_row, new_col))
-    return best
+    return float("inf")
 
 
 def generate_adjacent_tiles(colour,board):
