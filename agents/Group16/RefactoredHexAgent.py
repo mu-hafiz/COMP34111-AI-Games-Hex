@@ -93,7 +93,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                 0 if board.tiles[row][col].colour == player_to_move else 1
             )
             queue.append((row, col))
-        SINKS = {(board_size - 1, col) for col in range(board_size)}
+        SINKS = {(board_size-1, col) for col in range(board_size)}
     else:
         for row in range(board_size):
             col = 0
@@ -103,7 +103,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                 0 if board.tiles[row][col].colour == player_to_move else 1
             )
             queue.append((row, col))
-        SINKS = {(row, board_size - 1) for row in range(board_size)}
+        SINKS = {(row, board_size-1) for row in range(board_size)}
 
     while queue:
         row, col = queue.popleft()
@@ -242,7 +242,7 @@ def identify_decision(information_set):
     if len(information_set["Lost Bridges"]) == 0:
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections Plus Adjacent")
-        #list_of_decisions.append("Help Ourselves")
+        list_of_decisions.append("Help Ourselves")
         
 
         
@@ -260,7 +260,7 @@ def identify_decision(information_set):
         list_of_decisions.append("Fill Weak Connections")
 
     # Decide how mean we want to be
-    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) - calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]) <= 1:
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
@@ -293,6 +293,7 @@ def generate_weak_connections(colour, board):
             
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
     current_bridges = set(generate_current_bridges(colour,board))
+    current_bridges = [x for sublist in current_bridges for x in sublist]
     return list((set(adjacents) & set(move_set)).difference(current_bridges))
 
 
@@ -508,7 +509,7 @@ def constraint_moveset(movesets: list[set],colour,board):
 
 
     enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
-    enemy_bridges = [x for sublist in enemy_bridges for x in sublist]
+    enemy_bridges    = [x for sublist in enemy_bridges for x in sublist]
     enemy_bridges = set(enemy_bridges)
     current = set(current).difference(set(enemy_bridges))
 
