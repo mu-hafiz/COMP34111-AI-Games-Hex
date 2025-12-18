@@ -137,8 +137,17 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
 
+    opponent_bridges = []
+    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
+        opponent_bridges.extend(bridges)
+
+    opponent_bridges = set(opponent_bridges)
+
     while queue:
         row, col = queue.popleft()
+
+        if Move(row, col) in opponent_bridges:
+            continue
 
         if (row, col) in SINKS:
             return costs_matrix[row][col]
