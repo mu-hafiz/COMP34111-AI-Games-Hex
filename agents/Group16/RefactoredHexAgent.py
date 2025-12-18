@@ -234,6 +234,8 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
+        "Nullify Enemy OP Connections",
+        "Prioritise OP Connections",
         "Attack Weak Connections",
         "Be Mean",
         "Play Best Fair Move",
@@ -294,8 +296,10 @@ def identify_decision(information_set):
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
-            if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
-                list_of_decisions.append("Attack Weak Connections")
+        if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
+            list_of_decisions.append("Attack Weak Connections")
+        if len(generate_OP_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
+            list_of_decisions.append("Nullify Enemy OP Connections")
 
 
     """
@@ -386,6 +390,7 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
 
     execution_flow_dict = {
         "Play Best Fair Move":lambda:  get_fair_first_moves(),
+        "Nullify Enemy OP Connections":lambda:  generate_OP_connections(Colour.opposite(colour),board),
         "Swap": lambda: swap(),
         "Central Move": lambda: central_move(board),
         "Potential Connections Plus Adjacent":lambda: potential_connections_or_adjacent(colour, board),
@@ -646,6 +651,8 @@ def generate_OP_connections(colour,board):
 
     useful_op_connections = []
     reach_before_move = check_reach(colour, board, generate_current_bridges(colour, board))
+
+
 
     # Check if moves complete a reach
     for move in op_connections:
@@ -1316,8 +1323,7 @@ Final list of things left to add/change:
         We want to restrict our moveset to the empty tiles that satisfy these patterns.
         Pattern 2 is more important than pattern 1.
 3. Make a final decision on how mean it should be backed up with some testing.
-4. Revive OP connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
-        If it was false and now its true we play that move instantly
+
 5. Again use the same OP connections logic but from the enemy perspective to block them from winning if they can win in one move.
         Note: If the opponent has a loose connection which is where they have two tiles on the same column or row (depending on their colour) 
         with two empty spaces between them. This is another version of point 2 because they actually have two options for their third move that 
