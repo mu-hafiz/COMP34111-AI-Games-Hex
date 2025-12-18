@@ -10,6 +10,7 @@ from src.Colour import Colour
 from src.Move import Move
 from itertools import combinations
 import collections
+from typing import List
 
 DIRECTIONS = [
     (-1, 0),
@@ -190,7 +191,7 @@ def setup_walls(colour):
 
 
 def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
-    """Get a list of all the empty tiles on the board."""
+    """Get a list of all the tiles occupied by the given colour on the board."""
     moves: list[Move] = []
     for x in range(board.size):
         for y in range(board.size):
@@ -626,7 +627,7 @@ def get_fair_first_moves():
 def generate_OP_connections(colour,board):
 
     """
-    deprecated, cant make use of it, remove eventually
+    Gets the list of moves that contribute to two or more connections, and contribute to the final reach.
     """
 
     wall_list = setup_walls(colour)
@@ -640,8 +641,25 @@ def generate_OP_connections(colour,board):
     for tile in our_tiles:
         potential_connections += cardinal_dirs(tile, wall_list, None, board)
     
+    # Get tiles that contribute to more than one potential connection
+    op_connections: List[Move] = list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
+
+    useful_op_connections = []
+    reach_before_move = check_reach(colour, board, generate_current_bridges(colour, board))
+
+    # Check if moves complete a reach
+    for move in op_connections:
+        board_with_move = clone_board(board)
+        board_with_move.tiles[move.x][move.y].colour = colour
+        reach_after_move = check_reach(colour, board_with_move, generate_current_bridges(colour, board_with_move))
+        
+        # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
+        # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
+        # TRUE to FALSE can't happen
+        if reach_before_move != reach_after_move:
+            useful_op_connections.append(move)
     
-    return list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
+    return useful_op_connections
 
 
 
