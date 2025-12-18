@@ -105,46 +105,26 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
     board_size = board.size
     costs_matrix = [[float("inf")] * board_size for _ in range(board_size)]
 
-    enemy_bridges = generate_current_bridges(Colour.opposite(player_to_move),board)
-    enemy_bridges = [x for sublist in enemy_bridges for x in sublist]
-    our_bridges = generate_current_bridges(player_to_move,board)
-    our_bridges = [x for sublist in our_bridges for x in sublist]
-
+    
 
     if player_to_move == Colour.RED:
         for col in range(board_size):
             row = 0
-            current_tile = board.tiles[row][col]
-            if (current_tile.colour == Colour.opposite(player_to_move)) or current_tile in enemy_bridges:
-                costs_matrix[row][col] = float("inf")
-                # Tile is controlled by enemy
-            elif current_tile.colour == player_to_move:
-                costs_matrix[row][col] = 0
-                # Tile is owned by us
-            elif current_tile in our_bridges:
-                costs_matrix[row][col] = 0.5
-                # Tile is our bridge
-            else:
-                costs_matrix[row][col] = 1
-                # Tile is unclaimed
+            if board.tiles[row][col].colour == Colour.opposite(player_to_move):
+                continue
+            costs_matrix[row][col] = (
+                0 if board.tiles[row][col].colour == player_to_move else 1
+            )
             queue.append((row, col))
         SINKS = {(board_size - 1, col) for col in range(board_size)}
     else:
         for row in range(board_size):
             col = 0
-            current_tile = board.tiles[row][col]
-            if (current_tile.colour == Colour.opposite(player_to_move)) or current_tile in enemy_bridges:
-                costs_matrix[row][col] = float("inf")
-                # Tile is controlled by enemy
-            elif current_tile.colour == player_to_move:
-                costs_matrix[row][col] = 0
-                # Tile is owned by us
-            elif current_tile in our_bridges:
-                costs_matrix[row][col] = 0.5
-                # Tile is our bridge
-            else:
-                costs_matrix[row][col] = 1
-                # Tile is unclaimed
+            if board.tiles[row][col].colour == Colour.opposite(player_to_move):
+                continue
+            costs_matrix[row][col] = (
+                0 if board.tiles[row][col].colour == player_to_move else 1
+            )
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
 
@@ -331,8 +311,8 @@ def identify_decision(information_set):
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
-    print(f"I think it takes that guy ({Colour.opposite(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
-    print(f"I think it takes me ({(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]))," tiles to win")
+    print("I think it takes that guy ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
+    print("I think it takes ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]))," tiles to win")
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
@@ -501,53 +481,18 @@ def generate_disrupting_moves(colour,board):
     
     move_set = []
 
-    high_score = 0
-
     for move in legals:
         board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
         enemy_change = enemy_current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
         our_change = our_current_needed - calculate_moves_needed_to_win(board_copy,colour)
-        if (enemy_change < 0):
+        if (enemy_change < 0) or (our_change > 0) :
             # That move is productive for us (bad for enemy)
-            if enemy_change > high_score:
-                move_set = [move]
-                high_score = enemy_change
             move_set.append(move)
-
 
 
     return move_set
 
-# just testin out this func
-def maximise_gain(colour,board,move_set):
-        # Check if moves complete a reach
-
-    our_before = calculate_moves_needed_to_win(board,colour)
-    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour))
-    opponent_colour = Colour.opposite(colour)
-    greedy_moveset = []
-    for move in move_set:
-        board_with_move = clone_board(board)
-        board_with_move.tiles[move.x][move.y].colour = colour
-        
-        # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
-        # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
-        # TRUE to FALSE can't happen
-        # if reach_before_move != reach_after_move:
-        #     useful_op_connections.append(move)
-        our_after = calculate_moves_needed_to_win(board_with_move,colour)
-
-        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour))
-
-        if our_after < our_before:
-            greedy_moveset.append(move)
-
-        if enemy_after > enemy_before:
-            greedy_moveset.append(move)
-
-    
-    return list(set(greedy_moveset))
 
 def potential_connections_or_adjacent(colour,board):
     combined_list = generate_potential_connections(colour,board) + generate_adjacent_tiles(colour,board)
@@ -727,7 +672,7 @@ def generate_OP_connections(colour,board):
         #     useful_op_connections.append(move)
         our_after = calculate_moves_needed_to_win(board_with_move,colour)
 
-        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour))
+        enemy_after = calculate_moves_needed_to_win(board,Colour.opposite(colour))
 
         if our_after < our_before:
             useful_op_connections.append(move)
@@ -736,7 +681,7 @@ def generate_OP_connections(colour,board):
             useful_op_connections.append(move)
 
     
-    return list(set(useful_op_connections))
+    return useful_op_connections
 
 
 
@@ -1270,7 +1215,7 @@ def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     return result
 
 
-class RefactoredHexAgent(AgentBase):
+class Acceptable(AgentBase):
     _board_size: int = 11
 
     """

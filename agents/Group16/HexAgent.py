@@ -501,7 +501,6 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
 
-            # how do we return the move we just played as a 
             if node.is_terminal(): 
                 instant_victory = move
 
