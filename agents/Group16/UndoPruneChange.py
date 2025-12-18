@@ -31,12 +31,11 @@ def prune_dead_cells(
     moves: list[Move],
     my_moves_to_win: float,
     opponent_moves_to_win: float,
-    player_to_move: Colour,
+    my_colour: Colour,
     ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
     
-    pot_cons = generate_potential_connections(player_to_move,board)
-
+    pot_cons = generate_potential_connections(my_colour,board)
 
     for move in moves:
         row, col = move.x, move.y
@@ -44,7 +43,7 @@ def prune_dead_cells(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
                 board.tiles[row + dir_row][col + dir_col].colour
-                in (player_to_move, Colour.opposite(player_to_move))
+                in (my_colour, Colour.opposite(my_colour))
             )
             for dir_row, dir_col in DIRECTIONS
         )
@@ -58,10 +57,10 @@ def prune_dead_cells(
 
         original_cell_state = board.tiles[row][col].colour
 
-        apply_move(board, move, player_to_move)
-        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move)
+        apply_move(board, move, my_colour)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
         new_opponents_moves_to_win = calculate_moves_needed_to_win(
-            board, Colour.opposite(player_to_move)
+            board, Colour.opposite(my_colour)
         )
 
         board.tiles[row][col].colour = original_cell_state
@@ -261,7 +260,7 @@ def identify_decision(information_set):
 
     # print(list_of_decisions)
 
-    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) - calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]) <= 2:
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
@@ -957,7 +956,7 @@ def mcts_search(
                 node = node.select_child(my_colour, exploration=0.1)
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
-            if not node.is_terminal():
+            if (not node.is_terminal() or not check_reach(node.player_to_move, node.board, generate_current_bridges(node.player_to_move, node.board)) and not node.is_fully_expanded()) and node.untried_moves:
                 if node.pruned_moves is None:
                     my_moves_to_win = calculate_moves_needed_to_win(
                         node.board, node.player_to_move
@@ -970,7 +969,7 @@ def mcts_search(
                         node.untried_moves,
                         my_moves_to_win,
                         opponent_moves_to_win,
-                        node.player_to_move,
+                        my_colour,
                     )
 
                 # print(node.pruned_moves)
@@ -984,7 +983,15 @@ def mcts_search(
             # 3) SIMULATION: random playout from this node
 
             # If the node we picked wins in one move, play it
-            if node.is_terminal() and node.player_to_move == root.player_to_move:
+            before = check_reach(
+                node.player_to_move, node.board, generate_current_bridges(node.player_to_move, node.board)
+            )
+            new_board = clone_board(node.board)
+            new_board.tiles[move.x][move.y].colour = node.player_to_move
+            after = check_reach(
+                node.player_to_move, new_board, generate_current_bridges(node.player_to_move, new_board)
+            )
+            if (node.is_terminal() or (before == False and after == True)) and node.player_to_move == root.player_to_move:
                 instant_victory = move
                 return move
 
@@ -1123,7 +1130,7 @@ def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     return result
 
 
-class RefactoredHexAgent(AgentBase):
+class UndoPruneChange(AgentBase):
     _board_size: int = 11
 
     """
@@ -1204,8 +1211,8 @@ class RefactoredHexAgent(AgentBase):
 # python3 Hex.py -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "Group16" -p1 "agents.Human.HumanPlayer HumanPlayer" -p1Name "Human"
 
 
-#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"  
-#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"
+# python3 Hex.py -p1 "agents.Group16.UndoPruneChange UndoPruneChange" -p1Name "without prune change" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "with prune change" -a -g 100 
+#python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "with prune change" -p2 "agents.Group16.UndoPruneChange UndoPruneChange" -p2Name "without prune change"
 
 """
 
@@ -1235,16 +1242,11 @@ AWESOME NEW THINGS WE CAN DO BY MAKING MULTIPLE DECISIONS THAT CONSTRAIN MOVESET
         We want to restrict our moveset to the empty tiles that satisfy these patterns.
         Pattern 2 is more important than pattern 1.
 
-I think its not being mean enough sometimes, could change the condition to be if theirwinmoves - ourwinmoves <= 1 or 2
 
-sometimes it gets given a giant moveset and seeminly does no mcts (theres no report top k)
-im assuming its pruning them all off but i dont know why
-
-we could revive op connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
-if it was false and now its true we play that move instantly
+   
 
 
-prune dead cells function allows adjacent cells that are also bridges so it fills gaps in where it doesnt need to
+
 
 
 

@@ -31,11 +31,11 @@ def prune_dead_cells(
     moves: list[Move],
     my_moves_to_win: float,
     opponent_moves_to_win: float,
-    player_to_move: Colour,
+    my_colour: Colour,
     ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
     
-    pot_cons = generate_potential_connections(player_to_move,board)
+
 
 
     for move in moves:
@@ -44,7 +44,7 @@ def prune_dead_cells(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
                 board.tiles[row + dir_row][col + dir_col].colour
-                in (player_to_move, Colour.opposite(player_to_move))
+                in (my_colour, Colour.opposite(my_colour))
             )
             for dir_row, dir_col in DIRECTIONS
         )
@@ -52,16 +52,13 @@ def prune_dead_cells(
         if is_adjacent_to_any_stone:
             remaining_moves.append((move, 1))
             continue
-        if move in pot_cons:
-            remaining_moves.append((move, 2))
-            continue
 
         original_cell_state = board.tiles[row][col].colour
 
-        apply_move(board, move, player_to_move)
-        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move)
+        apply_move(board, move, my_colour)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, my_colour)
         new_opponents_moves_to_win = calculate_moves_needed_to_win(
-            board, Colour.opposite(player_to_move)
+            board, Colour.opposite(my_colour)
         )
 
         board.tiles[row][col].colour = original_cell_state
@@ -72,7 +69,6 @@ def prune_dead_cells(
         ):
             remaining_moves.append((move, 2))
     
-
 
     if not remaining_moves:
         return [(move, 1) for move in moves]
@@ -151,9 +147,7 @@ def generate_adjacent_tiles(colour,board):
             adjacent_tiles.append(new_tile)
 
     legal_adjacent_tiles = set(legals) & set(adjacent_tiles)
-    bridges = [x for sublist in generate_current_bridges(colour,board) for x in sublist]
-    smart_adjacent_tiles = legal_adjacent_tiles.difference(set(bridges))
-    return list(smart_adjacent_tiles)
+    return list(legal_adjacent_tiles)
 
 
 def setup_walls(colour):
@@ -212,9 +206,9 @@ def identify_decision(information_set):
         "Defend",
         "Win",
         "Connect Weak Connection",
+        "Be Mean",
         "Play Best Fair Move",
         "Swap", 
-        "Be Mean",
         "Central Move",
         "Fill Weak Connections",
         "Potential Connections Plus Adjacent",
@@ -261,10 +255,9 @@ def identify_decision(information_set):
 
     # print(list_of_decisions)
 
-    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) - calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]) <= 2:
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
-        if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
-            list_of_decisions.append("Be Mean")
+        list_of_decisions.append("Be Mean")
         # Fuck him up
     
 
@@ -287,7 +280,7 @@ def generate_weak_connections(colour, board):
     for tile in adjacents:
         board_copy = clone_board(board)
         board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
-        after = calculate_moves_needed_to_win(board_copy,colour)
+        after = calculate_moves_needed_to_win(board,Colour.opposite(colour))
         if before < after:
             #shit
             move_set.append(tile)
@@ -970,10 +963,9 @@ def mcts_search(
                         node.untried_moves,
                         my_moves_to_win,
                         opponent_moves_to_win,
-                        node.player_to_move,
+                        my_colour,
                     )
 
-                # print(node.pruned_moves)
                 # move = random.choice(node.pruned_moves)
                 move = random.choices(
                     [move for move, _ in node.pruned_moves],
@@ -1197,7 +1189,7 @@ class RefactoredHexAgent(AgentBase):
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
 
 # Playing main vs new agent
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "(New) Rewritten HexAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "(Old) MCTS Only" -a -g 50
+# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "Fixed Pain and Suffering" -a -g 100
 
 # To play the agent against a human:
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
@@ -1235,16 +1227,11 @@ AWESOME NEW THINGS WE CAN DO BY MAKING MULTIPLE DECISIONS THAT CONSTRAIN MOVESET
         We want to restrict our moveset to the empty tiles that satisfy these patterns.
         Pattern 2 is more important than pattern 1.
 
-I think its not being mean enough sometimes, could change the condition to be if theirwinmoves - ourwinmoves <= 1 or 2
 
-sometimes it gets given a giant moveset and seeminly does no mcts (theres no report top k)
-im assuming its pruning them all off but i dont know why
-
-we could revive op connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
-if it was false and now its true we play that move instantly
+   
 
 
-prune dead cells function allows adjacent cells that are also bridges so it fills gaps in where it doesnt need to
+
 
 
 

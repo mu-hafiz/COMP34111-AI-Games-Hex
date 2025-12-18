@@ -1,1 +1,1 @@
-agents.Group16.HexAgent HexAgent
+agents.Group16.RefactoredHexAgent RefactoredHexAgent
