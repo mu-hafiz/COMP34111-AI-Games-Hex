@@ -653,18 +653,31 @@ def generate_OP_connections(colour,board):
     reach_before_move = check_reach(colour, board, generate_current_bridges(colour, board))
 
 
+    our_before = calculate_moves_needed_to_win(board,colour)
+    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+
+
 
     # Check if moves complete a reach
     for move in op_connections:
         board_with_move = clone_board(board)
         board_with_move.tiles[move.x][move.y].colour = colour
-        reach_after_move = check_reach(colour, board_with_move, generate_current_bridges(colour, board_with_move))
         
         # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
         # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
         # TRUE to FALSE can't happen
-        if reach_before_move != reach_after_move:
+        # if reach_before_move != reach_after_move:
+        #     useful_op_connections.append(move)
+        our_after = calculate_moves_needed_to_win(board_with_move,colour)
+
+        enemy_after = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+
+        if our_after < our_before:
             useful_op_connections.append(move)
+
+        if enemy_after > enemy_before:
+            useful_op_connections.append(move)
+
     
     return useful_op_connections
 
