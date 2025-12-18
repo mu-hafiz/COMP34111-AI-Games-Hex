@@ -259,8 +259,9 @@ def identify_decision(information_set):
     if len(generate_weak_connections(information_set["Colour"],information_set["Board"])) > 0:
         list_of_decisions.append("Fill Weak Connections")
 
-    # Decide how mean we want to be
-    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) - calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]) <= 1:
+    # print(list_of_decisions)
+
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) - calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]) <= 2:
         # If the enemy wins before us
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
@@ -932,20 +933,12 @@ def mcts_search(
         root.untried_moves = root_allowed_moves
         # pre-expand each allowed move as a child so the search distributes sims among them
 
-
-        for move in root_allowed_moves:
-            board_copy = clone_board(root_board)
-            # If we were to go 1 deep into the MCTS tree, do we win?
-            board_copy.tiles[move.x][move.y].colour = my_colour
-            if board_copy.has_ended(my_colour) or check_reach(my_colour,board_copy,generate_current_bridges(my_colour,board_copy)):
-                return move
-        # maybe one of these just
-
     start_time = time.perf_counter()
     it = 0
 
     workers = multiprocessing.cpu_count()
 
+    instant_victory = None
 
     with Pool(processes=workers) as pool:
         while True:
@@ -990,7 +983,10 @@ def mcts_search(
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
-
+            # If the node we picked wins in one move, play it
+            if node.is_terminal() and node.player_to_move == root.player_to_move:
+                instant_victory = move
+                return move
 
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
             rollout_results = [
@@ -1065,6 +1061,8 @@ def mcts_search(
             ),  # secondary: shortest winning rollout
         ),
     )
+    if instant_victory:
+        return move
     return best_child.move
 
 
@@ -1125,7 +1123,7 @@ def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     return result
 
 
-class RefactoredHexAgent(AgentBase):
+class PreRAA(AgentBase):
     _board_size: int = 11
 
     """
@@ -1199,7 +1197,7 @@ class RefactoredHexAgent(AgentBase):
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
 
 # Playing main vs new agent
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.PreRAA PreRAA" -p2Name "PreRAA" -a -g 50
+# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "(New) Rewritten HexAgent" -p2 "agents.Group16.HexAgent HexAgent" -p2Name "(Old) MCTS Only" -a -g 50
 
 # To play the agent against a human:
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
@@ -1212,10 +1210,20 @@ class RefactoredHexAgent(AgentBase):
 """
 
 
-Final list of things left to add/change:
+AWESOME NEW THINGS WE CAN DO BY MAKING MULTIPLE DECISIONS THAT CONSTRAIN MOVESET AND THEN FINDING THE MOVES THAT SATISFY THE MOST CONSTRAINTS 
 
-1. Check if we do fill in weak connections correctly and if not then fix that.
-2. Identify the enemy's weak connections and block them.
+1. Identifying weak connections we have and filling them in.
+        Pattern: Two of our tiles on the same row or column with one blank tile between them
+        Method: 
+        Find all the empty tiles adjacent to our tiles.
+        If they adjacent to exactly 2 on the same row or column then we have a weak connection and should fill it in.
+        Note: This would work really nicely with potential connections, but it trumps potential connections if theres none in common.
+        Two cases:
+            1. If its both an adjacent tile and a potential connection then we should prioritise it.
+            2. If its adjacent to two of our tiles AND they on same row and column then prioritise it.
+        Either of those combos help us to fill in weak connections i think they are equal priority (in my basic test case flowers)
+
+2. Identifying that the enemy has a weak connection and blocking it.
         Two patterns:
             1. Two of their tiles on the same row or column with one blank tile between
             2. Two of their tiles on the same row or column with two blank tiles between them
@@ -1226,16 +1234,18 @@ Final list of things left to add/change:
         Note: This would work really nicely with potential connections, but it trumps potential connections if theres none in common.
         We want to restrict our moveset to the empty tiles that satisfy these patterns.
         Pattern 2 is more important than pattern 1.
-3. Make a final decision on how mean it should be backed up with some testing.
-4. Revive OP connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
-        If it was false and now its true we play that move instantly
-5. Again use the same OP connections logic but from the enemy perspective to block them from winning if they can win in one move.
-        Note: If the opponent has a loose connection which is where they have two tiles on the same column or row (depending on their colour) 
-        with two empty spaces between them. This is another version of point 2 because they actually have two options for their third move that 
-        would give them strong connections to both. Again that's super valuable to them and we shouldn't let it happen. The way we counter in 
-        this case is to place our tile on either of the two spaces between their tiles.
-6. Update Aadil's prune dead cells function so adjacent tiles that are also bridges are pruned.
-7. Play the latest version against itself or any other version and study the games where it loses to understand why. -> Fix those issues if possible.
+
+I think its not being mean enough sometimes, could change the condition to be if theirwinmoves - ourwinmoves <= 1 or 2
+
+sometimes it gets given a giant moveset and seeminly does no mcts (theres no report top k)
+im assuming its pruning them all off but i dont know why
+
+we could revive op connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
+if it was false and now its true we play that move instantly
+
+
+prune dead cells function allows adjacent cells that are also bridges so it fills gaps in where it doesnt need to
+
 
 
 """
