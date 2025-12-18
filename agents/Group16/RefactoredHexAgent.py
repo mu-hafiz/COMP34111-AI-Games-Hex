@@ -43,6 +43,7 @@ def rollout_policy(
     return random.choices(moves, weights=weights)[0]
 
 
+
 def in_bounds(board: Board, row: int, col: int):
     board_size = board.size
     return 0 <= row < board_size and 0 <= col < board_size
@@ -54,27 +55,14 @@ def prune_dead_cells(
     my_moves_to_win: float,
     opponent_moves_to_win: float,
     player_to_move: Colour,
-) -> list[tuple[Move, int]]:
+    ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
+    
+    pot_cons = generate_potential_connections(player_to_move,board)
 
-    pot_cons = generate_potential_connections(player_to_move, board)
-
-    my_bridges = []
-    for bridges in generate_current_bridges(player_to_move, board):
-        my_bridges.extend(bridges)
-
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    my_bridges = set(my_bridges)
-    opponent_bridges = set(opponent_bridges)
 
     for move in moves:
         row, col = move.x, move.y
-        if Move(row, col) in my_bridges or Move(row, col) in opponent_bridges:
-            continue
-
         is_adjacent_to_any_stone = any(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
@@ -138,17 +126,8 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
 
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    opponent_bridges = set(opponent_bridges)
-
     while queue:
         row, col = queue.popleft()
-
-        if Move(row, col) in opponent_bridges:
-            continue
 
         if (row, col) in SINKS:
             return costs_matrix[row][col]
