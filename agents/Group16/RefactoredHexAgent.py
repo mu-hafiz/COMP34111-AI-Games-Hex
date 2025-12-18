@@ -508,6 +508,7 @@ def constraint_moveset(movesets: list[set],colour,board):
 
 
     enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
+    enemy_bridges = [x for sublist in enemy_bridges for x in sublist]
     enemy_bridges = set(enemy_bridges)
     current = set(current).difference(set(enemy_bridges))
 
