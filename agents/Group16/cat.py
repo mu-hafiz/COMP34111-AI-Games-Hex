@@ -233,8 +233,8 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
-        "Attack Weak Connections",
         "Be Mean",
+        "Connect Weak Connection",
         "Play Best Fair Move",
         "Swap", 
         "Central Move",
@@ -284,18 +284,12 @@ def identify_decision(information_set):
     if len(generate_weak_connections(information_set["Colour"],information_set["Board"])) > 0:
         list_of_decisions.append("Fill Weak Connections")
 
-
-
-
     # Decide how mean we want to be
     if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
-            if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
-                list_of_decisions.append("Attack Weak Connections")
-
 
     """
     Determine priority
@@ -309,37 +303,23 @@ def identify_decision(information_set):
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
+    adjacents = generate_adjacent_tiles(colour,board)
     
     before = calculate_moves_needed_to_win(board,colour)
 
     move_set = []
 
-    wall_list = setup_walls(colour)
-    legals = get_legal_moves(board) # prune
-    our_moves = get_colour_moves(board, colour)
-    all_tiles = our_moves + wall_list
-
-    adjacents = []
-
-    for tile in all_tiles:
-        for direction in DIRECTIONS:
-            new_tile = Move(tile.x + direction[0], tile.y + direction[1])
-            if new_tile in legals:
-                board_copy = clone_board(board)
-                # If in a hypothetical board state, the enemy taking a tile would hurt us
-                board_copy.tiles[new_tile.x][new_tile.y].colour = Colour.opposite(colour)
-                after = calculate_moves_needed_to_win(board_copy,colour)
-                # Take that tile
-                if after > before:
-                    adjacents.append(new_tile)
-                
-
-
-
+    for tile in adjacents:
+        board_copy = clone_board(board)
+        board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
+        after = calculate_moves_needed_to_win(board_copy,colour)
+        if before < after:
+            move_set.append(tile)
+            
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
     current_bridges = set(generate_current_bridges(colour,board))
     current_bridges = [x for sublist in current_bridges for x in sublist]
-    return list((set(adjacents)).difference(current_bridges))
+    return list((set(adjacents) & set(move_set)).difference(current_bridges))
 
 
 
@@ -393,7 +373,6 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Help Ourselves" :lambda:  (colour, board),
         "Be Mean": lambda: generate_disrupting_moves(colour, board),
         "Fill Weak Connections":lambda: generate_weak_connections(colour, board),
-        "Attack Weak Connections": lambda: generate_weak_connections(Colour.opposite(colour),board)
     }
 
 
@@ -1175,7 +1154,7 @@ def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     return result
 
 
-class RefactoredHexAgent(AgentBase):
+class Cat(AgentBase):
     _board_size: int = 11
 
     """
@@ -1272,7 +1251,6 @@ class RefactoredHexAgent(AgentBase):
 
 # Playing main vs new agent
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.PreRAA PreRAA" -p2Name "PreRAA" -a -g 50
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.cat Cat" -p2Name "cat" -a -g 50
 
 # To play the agent against a human:
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
@@ -1287,8 +1265,10 @@ class RefactoredHexAgent(AgentBase):
 
 Final list of things left to add/change:
 
+1. Check if we do fill in weak connections correctly and if not then fix that.
 2. Identify the enemy's weak connections and block them.
         Two patterns:
+            1. Two of their tiles on the same row or column with one blank tile between
             2. Two of their tiles on the same row or column with two blank tiles between them
         Method:
         Find all the empty tiles adjacent to their tiles.
@@ -1306,6 +1286,7 @@ Final list of things left to add/change:
         would give them strong connections to both. Again that's super valuable to them and we shouldn't let it happen. The way we counter in 
         this case is to place our tile on either of the two spaces between their tiles.
 6. Update Aadil's prune dead cells function so adjacent tiles that are also bridges are pruned.
-    When we figure out the moves to win for a player, we need to not go through enemy's strong connections
 7. Play the latest version against itself or any other version and study the games where it loses to understand why. -> Fix those issues if possible.
+
+
 """
