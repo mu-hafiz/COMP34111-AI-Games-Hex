@@ -10,7 +10,6 @@ from src.Colour import Colour
 from src.Move import Move
 from itertools import combinations
 import collections
-from typing import List
 
 DIRECTIONS = [
     (-1, 0),
@@ -43,6 +42,7 @@ def rollout_policy(
     return random.choices(moves, weights=weights)[0]
 
 
+
 def in_bounds(board: Board, row: int, col: int):
     board_size = board.size
     return 0 <= row < board_size and 0 <= col < board_size
@@ -54,27 +54,14 @@ def prune_dead_cells(
     my_moves_to_win: float,
     opponent_moves_to_win: float,
     player_to_move: Colour,
-) -> list[tuple[Move, int]]:
+    ) -> list[tuple[Move, int]]:
     remaining_moves: list[tuple[Move, int]] = []
+    
+    pot_cons = generate_potential_connections(player_to_move,board)
 
-    pot_cons = generate_potential_connections(player_to_move, board)
-
-    my_bridges = []
-    for bridges in generate_current_bridges(player_to_move, board):
-        my_bridges.extend(bridges)
-
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    my_bridges = set(my_bridges)
-    opponent_bridges = set(opponent_bridges)
 
     for move in moves:
         row, col = move.x, move.y
-        if Move(row, col) in my_bridges or Move(row, col) in opponent_bridges:
-            continue
-
         is_adjacent_to_any_stone = any(
             in_bounds(board=board, row=row + dir_row, col=col + dir_col)
             and (
@@ -138,17 +125,8 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
 
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    opponent_bridges = set(opponent_bridges)
-
     while queue:
         row, col = queue.popleft()
-
-        if Move(row, col) in opponent_bridges:
-            continue
 
         if (row, col) in SINKS:
             return costs_matrix[row][col]
@@ -212,7 +190,7 @@ def setup_walls(colour):
 
 
 def get_colour_moves(board: Board, colour: Colour) -> list[Move]:
-    """Get a list of all the tiles occupied by the given colour on the board."""
+    """Get a list of all the empty tiles on the board."""
     moves: list[Move] = []
     for x in range(board.size):
         for y in range(board.size):
@@ -255,10 +233,8 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
-        "Nullify Enemy OP Connections",
-        "Prioritise OP Connections",
-        "Attack Weak Connections",
         "Be Mean",
+        "Connect Weak Connection",
         "Play Best Fair Move",
         "Swap", 
         "Central Move",
@@ -308,20 +284,12 @@ def identify_decision(information_set):
     if len(generate_weak_connections(information_set["Colour"],information_set["Board"])) > 0:
         list_of_decisions.append("Fill Weak Connections")
 
-
-
-
     # Decide how mean we want to be
     if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
         # If the enemy wins before us
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
-        if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
-            list_of_decisions.append("Attack Weak Connections")
-        if len(generate_OP_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
-            list_of_decisions.append("Nullify Enemy OP Connections")
-
 
     """
     Determine priority
@@ -335,37 +303,23 @@ def identify_decision(information_set):
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
+    adjacents = generate_adjacent_tiles(colour,board)
     
     before = calculate_moves_needed_to_win(board,colour)
 
     move_set = []
 
-    wall_list = setup_walls(colour)
-    legals = get_legal_moves(board) # prune
-    our_moves = get_colour_moves(board, colour)
-    all_tiles = our_moves + wall_list
-
-    adjacents = []
-
-    for tile in all_tiles:
-        for direction in DIRECTIONS:
-            new_tile = Move(tile.x + direction[0], tile.y + direction[1])
-            if new_tile in legals:
-                board_copy = clone_board(board)
-                # If in a hypothetical board state, the enemy taking a tile would hurt us
-                board_copy.tiles[new_tile.x][new_tile.y].colour = Colour.opposite(colour)
-                after = calculate_moves_needed_to_win(board_copy,colour)
-                # Take that tile
-                if after > before:
-                    adjacents.append(new_tile)
-                
-
-
-
+    for tile in adjacents:
+        board_copy = clone_board(board)
+        board_copy.tiles[tile.x][tile.y].colour = Colour.opposite(colour)
+        after = calculate_moves_needed_to_win(board_copy,colour)
+        if before < after:
+            move_set.append(tile)
+            
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
     current_bridges = set(generate_current_bridges(colour,board))
     current_bridges = [x for sublist in current_bridges for x in sublist]
-    return list((set(adjacents)).difference(current_bridges))
+    return list((set(adjacents) & set(move_set)).difference(current_bridges))
 
 
 
@@ -411,7 +365,6 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
 
     execution_flow_dict = {
         "Play Best Fair Move":lambda:  get_fair_first_moves(),
-        "Nullify Enemy OP Connections":lambda:  generate_OP_connections(Colour.opposite(colour),board),
         "Swap": lambda: swap(),
         "Central Move": lambda: central_move(board),
         "Potential Connections Plus Adjacent":lambda: potential_connections_or_adjacent(colour, board),
@@ -420,7 +373,6 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Help Ourselves" :lambda:  (colour, board),
         "Be Mean": lambda: generate_disrupting_moves(colour, board),
         "Fill Weak Connections":lambda: generate_weak_connections(colour, board),
-        "Attack Weak Connections": lambda: generate_weak_connections(Colour.opposite(colour),board)
     }
 
 
@@ -653,7 +605,7 @@ def get_fair_first_moves():
 def generate_OP_connections(colour,board):
 
     """
-    Gets the list of moves that contribute to two or more connections, and contribute to the final reach.
+    deprecated, cant make use of it, remove eventually
     """
 
     wall_list = setup_walls(colour)
@@ -667,27 +619,8 @@ def generate_OP_connections(colour,board):
     for tile in our_tiles:
         potential_connections += cardinal_dirs(tile, wall_list, None, board)
     
-    # Get tiles that contribute to more than one potential connection
-    op_connections: List[Move] = list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
-
-    useful_op_connections = []
-    reach_before_move = check_reach(colour, board, generate_current_bridges(colour, board))
-
-
-
-    # Check if moves complete a reach
-    for move in op_connections:
-        board_with_move = clone_board(board)
-        board_with_move.tiles[move.x][move.y].colour = colour
-        reach_after_move = check_reach(colour, board_with_move, generate_current_bridges(colour, board_with_move))
-        
-        # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
-        # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
-        # TRUE to FALSE can't happen
-        if reach_before_move != reach_after_move:
-            useful_op_connections.append(move)
     
-    return useful_op_connections
+    return list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
 
 
 
@@ -1221,7 +1154,7 @@ def cardinal_dirs(current_tile: Move, walls, flag, board, special_case = False):
     return result
 
 
-class RefactoredHexAgent(AgentBase):
+class Cat(AgentBase):
     _board_size: int = 11
 
     """
@@ -1318,7 +1251,6 @@ class RefactoredHexAgent(AgentBase):
 
 # Playing main vs new agent
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.PreRAA PreRAA" -p2Name "PreRAA" -a -g 50
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.cat Cat" -p2Name "cat" -a -g 50
 
 # To play the agent against a human:
 # python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
@@ -1333,8 +1265,10 @@ class RefactoredHexAgent(AgentBase):
 
 Final list of things left to add/change:
 
+1. Check if we do fill in weak connections correctly and if not then fix that.
 2. Identify the enemy's weak connections and block them.
         Two patterns:
+            1. Two of their tiles on the same row or column with one blank tile between
             2. Two of their tiles on the same row or column with two blank tiles between them
         Method:
         Find all the empty tiles adjacent to their tiles.
@@ -1344,13 +1278,15 @@ Final list of things left to add/change:
         We want to restrict our moveset to the empty tiles that satisfy these patterns.
         Pattern 2 is more important than pattern 1.
 3. Make a final decision on how mean it should be backed up with some testing.
-
+4. Revive OP connections as an endgame tactic by doing check reach before the move, adding the move to a copy of the board, then checking reach.
+        If it was false and now its true we play that move instantly
 5. Again use the same OP connections logic but from the enemy perspective to block them from winning if they can win in one move.
         Note: If the opponent has a loose connection which is where they have two tiles on the same column or row (depending on their colour) 
         with two empty spaces between them. This is another version of point 2 because they actually have two options for their third move that 
         would give them strong connections to both. Again that's super valuable to them and we shouldn't let it happen. The way we counter in 
         this case is to place our tile on either of the two spaces between their tiles.
 6. Update Aadil's prune dead cells function so adjacent tiles that are also bridges are pruned.
-    When we figure out the moves to win for a player, we need to not go through enemy's strong connections
 7. Play the latest version against itself or any other version and study the games where it loses to understand why. -> Fix those issues if possible.
+
+
 """
