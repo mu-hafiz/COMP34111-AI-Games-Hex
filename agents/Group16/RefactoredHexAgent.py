@@ -22,6 +22,7 @@ DIRECTIONS = [
 ]
 
 
+
 def rollout_policy(
     board: Board, player_to_move: Colour, legal_moves: list[Move]
 ) -> Move:
@@ -115,15 +116,12 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
         for col in range(board_size):
             row = 0
             current_tile = board.tiles[row][col]
-            if (current_tile.colour == Colour.opposite(player_to_move)) or current_tile in enemy_bridges:
+            if (current_tile.colour == Colour.opposite(player_to_move)) or Move(row,col) in enemy_bridges:
                 costs_matrix[row][col] = float("inf")
                 # Tile is controlled by enemy
             elif current_tile.colour == player_to_move:
                 costs_matrix[row][col] = 0
                 # Tile is owned by us
-            elif current_tile in our_bridges:
-                costs_matrix[row][col] = 0.5
-                # Tile is our bridge
             else:
                 costs_matrix[row][col] = 1
                 # Tile is unclaimed
@@ -133,26 +131,25 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
         for row in range(board_size):
             col = 0
             current_tile = board.tiles[row][col]
-            if (current_tile.colour == Colour.opposite(player_to_move)) or current_tile in enemy_bridges:
+            if (current_tile.colour == Colour.opposite(player_to_move)) or Move(row,col) in enemy_bridges:
                 costs_matrix[row][col] = float("inf")
                 # Tile is controlled by enemy
             elif current_tile.colour == player_to_move:
                 costs_matrix[row][col] = 0
                 # Tile is owned by us
-            elif current_tile in our_bridges:
-                costs_matrix[row][col] = 0.5
-                # Tile is our bridge
+
             else:
                 costs_matrix[row][col] = 1
                 # Tile is unclaimed
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
-
+    hs = float("inf")
     while queue:
         row, col = queue.popleft()
 
         if (row, col) in SINKS:
-            return costs_matrix[row][col]
+            hs = min(costs_matrix[row][col],hs)
+            continue
 
         for dir_row, dir_col in DIRECTIONS:
             new_row, new_col = row + dir_row, col + dir_col
@@ -160,10 +157,18 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                 continue
             if board.tiles[new_row][new_col].colour == Colour.opposite(player_to_move):
                 continue
+            
+            current_tile = board.tiles[new_row][new_col]
+            
+            if Move(new_row,new_col) in enemy_bridges:
+                cell_cost = float("inf")
+            elif current_tile.colour == Colour.opposite(player_to_move):
+                cell_cost = float("inf")
+            elif current_tile.colour == player_to_move:
+                cell_cost = 0
 
-            cell_cost = (
-                0 if board.tiles[new_row][new_col].colour == player_to_move else 1
-            )
+            else:
+                cell_cost = 1
             total_cost = costs_matrix[row][col] + cell_cost
 
             if total_cost < costs_matrix[new_row][new_col]:
@@ -172,7 +177,7 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
                     queue.appendleft((new_row, new_col))
                 else:
                     queue.append((new_row, new_col))
-    return float("inf")
+    return hs
 
 
 def generate_adjacent_tiles(colour,board):
@@ -520,13 +525,14 @@ def generate_disrupting_moves(colour,board):
     return move_set
 
 # just testin out this func
-def maximise_gain(colour,board,move_set):
+def maximise_gain(colour,board,move_set,):
         # Check if moves complete a reach
 
     our_before = calculate_moves_needed_to_win(board,colour)
     enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour))
     opponent_colour = Colour.opposite(colour)
     greedy_moveset = []
+    highscore = 0
     for move in move_set:
         board_with_move = clone_board(board)
         board_with_move.tiles[move.x][move.y].colour = colour
@@ -540,18 +546,16 @@ def maximise_gain(colour,board,move_set):
 
         enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour))
 
-        if our_after < our_before:
-            greedy_moveset.append(move)
-
-        if enemy_after > enemy_before:
-            greedy_moveset.append(move)
-
-    
+        delta = (our_before-our_after)-(enemy_before-enemy_after)
+        if delta+1 > highscore:
+            highscore = max(highscore,delta)
+            greedy_moveset = [move]
     return list(set(greedy_moveset))
 
 def potential_connections_or_adjacent(colour,board):
     combined_list = generate_potential_connections(colour,board) + generate_adjacent_tiles(colour,board)
-    return list(set(combined_list))
+    filtered_list = maximise_gain(colour,board,combined_list)
+    return list(set(filtered_list ))
 
 def check_reach(colour, board, bridges):
     """
@@ -702,6 +706,7 @@ def generate_OP_connections(colour,board):
     # For each tile
     for tile in our_tiles:
         potential_connections += cardinal_dirs(tile, wall_list, None, board)
+
     
     # Get tiles that contribute to more than one potential connection
     op_connections: List[Move] = list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
