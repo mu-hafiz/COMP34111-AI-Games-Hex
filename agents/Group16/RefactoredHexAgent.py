@@ -933,12 +933,20 @@ def mcts_search(
         root.untried_moves = root_allowed_moves
         # pre-expand each allowed move as a child so the search distributes sims among them
 
+
+        for move in root_allowed_moves:
+            board_copy = clone_board(root_board)
+            # If we were to go 1 deep into the MCTS tree, do we win?
+            board_copy.tiles[move.x][move.y].colour = my_colour
+            if board_copy.has_ended(my_colour) or check_reach(my_colour,board_copy,generate_current_bridges(my_colour,board_copy)):
+                return move
+        # maybe one of these just
+
     start_time = time.perf_counter()
     it = 0
 
     workers = multiprocessing.cpu_count()
 
-    instant_victory = None
 
     with Pool(processes=workers) as pool:
         while True:
@@ -983,10 +991,7 @@ def mcts_search(
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
 
-            # If the node we picked wins in one move, play it
-            if node.is_terminal() and node.player_to_move == root.player_to_move:
-                instant_victory = move
-                return move
+
 
             rollouts = [(child.board, child.player_to_move, my_colour)] * workers
             rollout_results = [
@@ -1061,8 +1066,6 @@ def mcts_search(
             ),  # secondary: shortest winning rollout
         ),
     )
-    if instant_victory:
-        return move
     return best_child.move
 
 
