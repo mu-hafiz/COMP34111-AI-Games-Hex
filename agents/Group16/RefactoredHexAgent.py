@@ -105,6 +105,8 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
     board_size = board.size
     costs_matrix = [[float("inf")] * board_size for _ in range(board_size)]
 
+    
+
     if player_to_move == Colour.RED:
         for col in range(board_size):
             row = 0
@@ -234,10 +236,10 @@ def identify_decision(information_set):
     priority_list = [
         "Defend",
         "Win",
-        "Nullify Enemy OP Connections",
         "Prioritise OP Connections",
         "Attack Weak Connections",
         "Be Mean",
+        "Nullify Enemy OP Connections",
         "Play Best Fair Move",
         "Swap", 
         "Central Move",
@@ -1325,24 +1327,8 @@ class RefactoredHexAgent(AgentBase):
 
 Final list of things left to add/change:
 
-2. Identify the enemy's weak connections and block them.
-        Two patterns:
-            2. Two of their tiles on the same row or column with two blank tiles between them
-        Method:
-        Find all the empty tiles adjacent to their tiles.
-        If they adjacent to exactly 2 on the same row or column then we have a weak connection and should block it.
-        Some check to see if their tile is two away from another one of their tiles in the same row or column
-        Note: This would work really nicely with potential connections, but it trumps potential connections if theres none in common.
-        We want to restrict our moveset to the empty tiles that satisfy these patterns.
-        Pattern 2 is more important than pattern 1.
 3. Make a final decision on how mean it should be backed up with some testing.
 
-5. Again use the same OP connections logic but from the enemy perspective to block them from winning if they can win in one move.
-        Note: If the opponent has a loose connection which is where they have two tiles on the same column or row (depending on their colour) 
-        with two empty spaces between them. This is another version of point 2 because they actually have two options for their third move that 
-        would give them strong connections to both. Again that's super valuable to them and we shouldn't let it happen. The way we counter in 
-        this case is to place our tile on either of the two spaces between their tiles.
-6. Update Aadil's prune dead cells function so adjacent tiles that are also bridges are pruned.
-    When we figure out the moves to win for a player, we need to not go through enemy's strong connections
+
 7. Play the latest version against itself or any other version and study the games where it loses to understand why. -> Fix those issues if possible.
 """
