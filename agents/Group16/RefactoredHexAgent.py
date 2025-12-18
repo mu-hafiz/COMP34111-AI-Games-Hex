@@ -21,6 +21,27 @@ DIRECTIONS = [
 ]
 
 
+def rollout_policy(
+    board: Board, player_to_move: Colour, legal_moves: list[Move]
+) -> Move:
+    weighted_moves = []
+    for move in legal_moves:
+        weight = 1
+        row, col = move.x, move.y
+        for dir_row, dir_col in DIRECTIONS:
+            new_row, new_col = row + dir_row, col + dir_col
+            if not in_bounds(board, new_row, new_col):
+                continue
+            if board.tiles[new_row][new_col].colour == player_to_move:
+                weight = 3
+                break
+            if board.tiles[new_row][new_col].colour == Colour.opposite(player_to_move):
+                weight = 2
+        weighted_moves.append((move, weight))
+    moves, weights = zip(*weighted_moves)
+    return random.choices(moves, weights=weights)[0]
+
+
 def in_bounds(board: Board, row: int, col: int):
     board_size = board.size
     return 0 <= row < board_size and 0 <= col < board_size
@@ -71,12 +92,10 @@ def prune_dead_cells(
             or new_opponents_moves_to_win > opponent_moves_to_win
         ):
             remaining_moves.append((move, 2))
-    
-
 
     if not remaining_moves:
         return [(move, 1) for move in moves]
-    return remaining_moves 
+    return remaining_moves
 
 
 def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
@@ -895,12 +914,14 @@ def play_from_node_S(
     rollout_moves = set()
 
     while True:
-        legal_moves = get_legal_moves(board) 
+        legal_moves = get_legal_moves(board)
         if not legal_moves:
             # Shouldn't happen in real Hex, but safe:
             return (0.0, rollout_moves)
 
-        move = random.choice(legal_moves)
+        move = rollout_policy(board, player_to_move, legal_moves)
+        # move = random.choice(legal_moves)
+
         apply_move(board, move, current_player)
         rollout_moves.add((move.x, move.y))
 
@@ -912,7 +933,6 @@ def play_from_node_S(
                 return (-1.0, rollout_moves)
 
         current_player = Colour.opposite(current_player)
-
 
 
 def mcts_search(
@@ -994,12 +1014,12 @@ def mcts_search(
                         node.player_to_move,
                     )
 
-                # print(node.pruned_moves)
-                # move = random.choice(node.pruned_moves)
                 move = random.choices(
                     [move for move, _ in node.pruned_moves],
                     weights=[weight for _, weight in node.pruned_moves],
                 )[0]
+
+                # move = random.choice(node.pruned_moves)
                 node = node.add_child(move)
                 child = node  # Checkpoint for rewarding rollouts
             # 3) SIMULATION: random playout from this node
