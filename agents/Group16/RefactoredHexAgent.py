@@ -908,11 +908,24 @@ def should_swap(board: Board, opp_move: Move) -> bool:
 
     return False
 
-def allocate_thinking_time(time_used, move_number, max_time, max_moves=100, C=20):
-
-    # If we're losing, we should really think more to be honest
-    # Just in general, we should evaluate this with respect to the boardstate
-
+def allocate_thinking_time(
+    time_used,
+    move_number,
+    board: Board,
+    colour: Colour,
+    our_bridges,
+    enemy_bridges,
+    max_time=295,
+    max_moves=70,
+    C=20,
+    C_multiplier=0.4
+):
+    # Spend more time thinking if we are behind on moves to win
+    our_min_win = calculate_moves_needed_to_win(board, colour, our_bridges, enemy_bridges)
+    enemy_min_win = calculate_moves_needed_to_win(board, Colour.opposite(colour), our_bridges, enemy_bridges)
+    # Increase conservativeness when behind
+    if enemy_min_win < our_min_win:
+        C = C * C_multiplier
     remaining_time = max_time - time_used
     return remaining_time / (C + max(max_moves - move_number, 0))
 
@@ -1090,7 +1103,7 @@ def play_from_node_S(
 def mcts_search(
     root_board: Board,
     my_colour: Colour,
-    max_iterations: int = 1000,
+    max_iterations: int = 100000,
     max_time_seconds: float | None = 2,
     root_allowed_moves: list[Move] | None = None,
     report_top_k: int | None = None,  # how many top entries to report (None=off)
@@ -1150,6 +1163,7 @@ def mcts_search(
             # 1) SELECTION: move down while node is fully expanded and not terminal
             while node.is_fully_expanded() and node.children and not node.is_terminal():
                 node = node.select_child(my_colour, exploration=0.1)
+            simulation_node = node
 
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal():
@@ -1176,13 +1190,12 @@ def mcts_search(
                 )[0]
 
                 # move = random.choice(node.pruned_moves)
-                node = node.add_child(move)
-                child = node  # Checkpoint for rewarding rollouts
+                simulation_node = node.add_child(move)
             # 3) SIMULATION: random playout from this node
 
 
 
-            rollouts = [(child.board, child.player_to_move, my_colour)] * workers
+            rollouts = [(simulation_node.board, simulation_node.player_to_move, my_colour)] * workers
             rollout_results = [
                 pool.apply_async(play_from_node_S, args=args) for args in rollouts
             ]
@@ -1191,7 +1204,7 @@ def mcts_search(
             it += len(rollout_results)
             # 4) BACKPROPAGATION: update nodes along path back to root
             for reward, rollout_moves in rollout_results:
-                node = child
+                node = simulation_node
                 while node is not None:
                     node.update(reward, rollout_moves, my_colour)
                     node = node.parent
@@ -1357,11 +1370,11 @@ class RefactoredHexAgent(AgentBase):
 
         self.time_spent += time_spent_executing
         
+        our_bridges = generate_current_bridges(self.colour, board)
+        enemy_bridges = generate_current_bridges(Colour.opposite(self.colour), board)    
+
         searching_time_start = time.perf_counter()
-
-        
-
-        searching_time = allocate_thinking_time(self.time_spent, turn, 300)
+        searching_time = allocate_thinking_time(self.time_spent, turn, board, self.colour, our_bridges, enemy_bridges)
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
@@ -1376,7 +1389,6 @@ class RefactoredHexAgent(AgentBase):
             chosen_move = mcts_search(
                 root_board=board,
                 my_colour=self.colour,
-                max_iterations=1000000,          # max number of random plays
                 max_time_seconds=searching_time,  # time limit per move
                 report_top_k=None,               # show top-5 for normal turns
                 root_allowed_moves=move_set
