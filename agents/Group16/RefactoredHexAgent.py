@@ -59,17 +59,6 @@ def prune_dead_cells(
 
     pot_cons = generate_potential_connections(player_to_move, board)
 
-    my_bridges = []
-    for bridges in generate_current_bridges(player_to_move, board):
-        my_bridges.extend(bridges)
-
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    my_bridges = set(my_bridges)
-    opponent_bridges = set(opponent_bridges)
-
     for move in moves:
         row, col = move.x, move.y
         if Move(row, col) in my_bridges or Move(row, col) in opponent_bridges:
