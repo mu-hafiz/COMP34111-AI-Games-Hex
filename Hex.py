@@ -115,19 +115,34 @@ if __name__ == "__main__":
         for game in range(args.games):
             print("-----------------------------------------------------------------------------")
             print(f"GAME {game+1}:")
-            g = Game(
-                player1=Player(
-                    name=args.player1Name,
-                    agent=getattr(p1, p1_class)(Colour.RED),
-                ),
-                player2=Player(
-                    name=args.player2Name,
-                    agent=getattr(p2, p2_class)(Colour.BLUE),
-                ),
-                board_size=args.board_size,
-                logDest=args.log,
-                verbose=args.verbose,
-            )
+            if game % 2 == 0:
+                g = Game(
+                    player1=Player(
+                        name=args.player1Name,
+                        agent=getattr(p1, p1_class)(Colour.RED),
+                    ),
+                    player2=Player(
+                        name=args.player2Name,
+                        agent=getattr(p2, p2_class)(Colour.BLUE),
+                    ),
+                    board_size=args.board_size,
+                    logDest=args.log,
+                    verbose=args.verbose,
+                )
+            else:
+                g = Game(
+                    player1=Player(
+                        name=args.player2Name,
+                        agent=getattr(p2, p2_class)(Colour.RED),
+                    ),
+                    player2=Player(
+                        name=args.player1Name,
+                        agent=getattr(p1, p1_class)(Colour.BLUE),
+                    ),
+                    board_size=args.board_size,
+                    logDest=args.log,
+                    verbose=args.verbose,
+                )
 
             try:
                 g.run()

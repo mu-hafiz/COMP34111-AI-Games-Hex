@@ -338,8 +338,8 @@ def identify_decision(information_set):
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
-    print(f"I think it takes that guy ({Colour.opposite(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"]),enemy_bridges,our_bridges), " tiles to win")
-    print(f"I think it takes me ({(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]),our_bridges,enemy_bridges)," tiles to win")
+    print(f"I think it takes that guy ({Colour.opposite(information_set['Colour'])}) ",calculate_moves_needed_to_win(information_set['Board'],Colour.opposite(information_set['Colour']),enemy_bridges,our_bridges), " tiles to win")
+    print(f"I think it takes me ({(information_set['Colour'])}) ",calculate_moves_needed_to_win(information_set['Board'],(information_set['Colour']),our_bridges,enemy_bridges)," tiles to win")
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
