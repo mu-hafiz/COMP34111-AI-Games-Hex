@@ -83,9 +83,11 @@ def prune_dead_cells(
         original_cell_state = board.tiles[row][col].colour
 
         apply_move(board, move, player_to_move)
-        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move)
+        our_bridges = generate_current_bridges(player_to_move,board)
+        enemy_bridges = generate_current_bridges(Colour.opposite(player_to_move),board)
+        new_my_moves_to_win = calculate_moves_needed_to_win(board, player_to_move,our_bridges,enemy_bridges)
         new_opponents_moves_to_win = calculate_moves_needed_to_win(
-            board, Colour.opposite(player_to_move)
+            board, Colour.opposite(player_to_move),enemy_bridges,our_bridges
         )
 
         board.tiles[row][col].colour = original_cell_state
@@ -101,16 +103,13 @@ def prune_dead_cells(
     return remaining_moves
 
 
-def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float:
+def calculate_moves_needed_to_win(board: Board, player_to_move: Colour,our_bridges,enemy_bridges) -> float:
     queue: collections.deque[tuple[int, int]] = collections.deque()
     board_size = board.size
     costs_matrix = [[float("inf")] * board_size for _ in range(board_size)]
 
-    enemy_bridges = generate_current_bridges(Colour.opposite(player_to_move),board)
-    enemy_bridges = [x for sublist in enemy_bridges for x in sublist]
-    our_bridges = generate_current_bridges(player_to_move,board)
-    our_bridges = [x for sublist in our_bridges for x in sublist]
-
+    enemy_bridges = set([x for sublist in enemy_bridges for x in sublist])
+    our_bridges = set([x for sublist in our_bridges for x in sublist])
 
     if player_to_move == Colour.RED:
         for col in range(board_size):
@@ -255,6 +254,9 @@ def identify_decision(information_set):
         explanation - 
     """
 
+    our_bridges = generate_current_bridges(information_set["Colour"],information_set["Board"])
+    enemy_bridges = generate_current_bridges(Colour.opposite(information_set["Colour"]),information_set["Board"])
+
 
 
     # Priority ranking of our decisions, lower index = higher priority
@@ -318,7 +320,7 @@ def identify_decision(information_set):
 
 
     # Decide how mean we want to be
-    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"]):
+    if calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"]),enemy_bridges,our_bridges) <= calculate_moves_needed_to_win(information_set["Board"],information_set["Colour"],our_bridges,enemy_bridges):
         # If the enemy wins before us
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
@@ -336,13 +338,16 @@ def identify_decision(information_set):
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
     print(list_of_decisions)
-    print(f"I think it takes that guy ({Colour.opposite(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"])), " tiles to win")
-    print(f"I think it takes me ({(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]))," tiles to win")
+    print(f"I think it takes that guy ({Colour.opposite(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],Colour.opposite(information_set["Colour"]),enemy_bridges,our_bridges), " tiles to win")
+    print(f"I think it takes me ({(information_set["Colour"])}) ",calculate_moves_needed_to_win(information_set["Board"],(information_set["Colour"]),our_bridges,enemy_bridges)," tiles to win")
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
     
-    before = calculate_moves_needed_to_win(board,colour)
+
+    our_bridges = generate_current_bridges(colour,board)
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
+    before = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
 
     move_set = []
 
@@ -353,14 +358,20 @@ def generate_weak_connections(colour, board):
 
     adjacents = []
 
+
+
+
     for tile in all_tiles:
         for direction in DIRECTIONS:
             new_tile = Move(tile.x + direction[0], tile.y + direction[1])
             if new_tile in legals:
+
                 board_copy = clone_board(board)
                 # If in a hypothetical board state, the enemy taking a tile would hurt us
                 board_copy.tiles[new_tile.x][new_tile.y].colour = Colour.opposite(colour)
-                after = calculate_moves_needed_to_win(board_copy,colour)
+                our_bridges = generate_current_bridges(colour,board_copy)
+                enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_copy)
+                after = calculate_moves_needed_to_win(board_copy,colour,our_bridges,enemy_bridges)
                 # Take that tile
                 if after > before:
                     adjacents.append(new_tile)
@@ -477,15 +488,22 @@ def help_ourselves(colour,board):
     this is not done whatsoever
     Find all moves that decrease our shortest path to win
     """
+
+    
+
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_copy)
+
     legals = get_legal_moves(board)
     potential_connections = generate_potential_connections(colour,board) 
-    current_needed = calculate_moves_needed_to_win(board,colour)
+    current_needed = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
     move_set = []
 
     for move in legals:
         board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
-        change = current_needed - calculate_moves_needed_to_win(board_copy,colour)
+        
+        our_bridges = generate_current_bridges(colour,board_copy)
+        change = current_needed - calculate_moves_needed_to_win(board_copy,colour,our_bridges,enemy_bridges)
         if change > 0:
             # That move is productive
             move_set.append(move)
@@ -501,9 +519,12 @@ def generate_disrupting_moves(colour,board):
     """
     legals = get_legal_moves(board)
 
-    enemy_current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour))
-    our_current_needed = calculate_moves_needed_to_win(board,colour)
     
+    our_bridges = generate_current_bridges(colour,board)
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
+    enemy_current_needed = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
+    
+
     move_set = []
 
     high_score = 0
@@ -511,8 +532,11 @@ def generate_disrupting_moves(colour,board):
     for move in legals:
         board_copy = clone_board(board)
         board_copy.tiles[move.x][move.y].colour = colour
-        enemy_change = enemy_current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour))
-        our_change = our_current_needed - calculate_moves_needed_to_win(board_copy,colour)
+
+
+        our_bridges = generate_current_bridges(colour,board_copy)
+        enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_copy)
+        enemy_change = enemy_current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour),enemy_bridges,our_bridges)
         if (enemy_change < 0):
             # That move is productive for us (bad for enemy)
             if enemy_change > high_score:
@@ -528,23 +552,27 @@ def generate_disrupting_moves(colour,board):
 def maximise_gain(colour,board,move_set,):
         # Check if moves complete a reach
 
-    our_before = calculate_moves_needed_to_win(board,colour)
-    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+    our_bridges = generate_current_bridges(colour,board)
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
+
+    our_before = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
+    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
     opponent_colour = Colour.opposite(colour)
     greedy_moveset = []
     highscore = 0
     for move in move_set:
         board_with_move = clone_board(board)
         board_with_move.tiles[move.x][move.y].colour = colour
-        
+        our_bridges = generate_current_bridges(colour,board_with_move)
+        enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_with_move)
         # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
         # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
         # TRUE to FALSE can't happen
         # if reach_before_move != reach_after_move:
         #     useful_op_connections.append(move)
-        our_after = calculate_moves_needed_to_win(board_with_move,colour)
+        our_after = calculate_moves_needed_to_win(board_with_move,colour,our_bridges,enemy_bridges)
 
-        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour))
+        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour),enemy_bridges,our_bridges)
 
         delta = (our_before-our_after)-(enemy_before-enemy_after)
         if delta+1 > highscore:
@@ -712,11 +740,12 @@ def generate_OP_connections(colour,board):
     op_connections: List[Move] = list(filter(lambda f: potential_connections.count(f) > 1,potential_connections))
 
     useful_op_connections = []
-    reach_before_move = check_reach(colour, board, generate_current_bridges(colour, board))
 
+    our_bridges = generate_current_bridges(colour,board)
+    enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
 
-    our_before = calculate_moves_needed_to_win(board,colour)
-    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour))
+    our_before = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
+    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
 
 
 
@@ -724,15 +753,15 @@ def generate_OP_connections(colour,board):
     for move in op_connections:
         board_with_move = clone_board(board)
         board_with_move.tiles[move.x][move.y].colour = colour
-        
+        our_bridges = generate_current_bridges(colour,board_with_move)
+        enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_with_move)
         # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
         # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
         # TRUE to FALSE can't happen
         # if reach_before_move != reach_after_move:
         #     useful_op_connections.append(move)
-        our_after = calculate_moves_needed_to_win(board_with_move,colour)
-
-        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour))
+        our_after = calculate_moves_needed_to_win(board_with_move,colour,our_bridges,enemy_bridges)
+        enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour),enemy_bridges,our_bridges)
 
         if our_after < our_before:
             useful_op_connections.append(move)
@@ -989,8 +1018,7 @@ class MCTSNode:
         return child
 
     def update(
-        self, reward: float, rollout_moves: set[tuple[int, int]], root_colour: Colour
-    ) -> None:
+        self, reward: float, rollout_moves: set[tuple[int, int]], root_colour: Colour) -> None:
         """
         Update this node's stats with the result of a simulation.
         +1 win, -1 loss.
@@ -1069,12 +1097,14 @@ def mcts_search(
     report_verbose  : whether to print textual output (useful to toggle)
     exploration     : exploration constant used in UCB1 selection and reporting
     """
+
     root = MCTSNode(
         board=clone_board(root_board),
         player_to_move=my_colour,
         parent=None,
         move=None,
     )
+
 
     # If a restricted candidate list is provided, limit/expand the root to only those moves.
     if root_allowed_moves:
@@ -1116,11 +1146,13 @@ def mcts_search(
             # 2) EXPANSION: if non-terminal and has untried moves, expand one
             if not node.is_terminal():
                 if node.pruned_moves is None:
+                    our_bridges = generate_current_bridges(my_colour,node.board)
+                    enemy_bridges = generate_current_bridges(Colour.opposite(my_colour),node.board)
                     my_moves_to_win = calculate_moves_needed_to_win(
-                        node.board, node.player_to_move
+                        node.board, node.player_to_move,our_bridges,enemy_bridges
                     )
                     opponent_moves_to_win = calculate_moves_needed_to_win(
-                        node.board, Colour.opposite(node.player_to_move)
+                        node.board, Colour.opposite(node.player_to_move),enemy_bridges,our_bridges
                     )
                     node.pruned_moves = prune_dead_cells(
                         node.board,
