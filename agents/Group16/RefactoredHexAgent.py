@@ -273,6 +273,7 @@ def identify_decision(information_set):
         "Fill Weak Connections",
         "Potential Connections Plus Adjacent",
         "Help Ourselves",
+        "Play Adjacent To Enemy"
     ]
 
 
@@ -300,8 +301,10 @@ def identify_decision(information_set):
         # If the enemy never threatened anything, play
         list_of_decisions.append("Potential Connections Plus Adjacent")
         #list_of_decisions.append("Help Ourselves")
-        
-
+        if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
+            list_of_decisions.append("Attack Weak Connections")
+        if len(generate_OP_connections(information_set["Colour"],information_set["Board"])) > 0:
+            list_of_decisions.append("Prioritise OP Connections")
         
     if len(information_set["Lost Bridges"]) != 0 and information_set[
         "Opp Move"
@@ -325,8 +328,9 @@ def identify_decision(information_set):
                 
         if len(generate_disrupting_moves(information_set["Colour"],information_set["Board"])) != 0:
             list_of_decisions.append("Be Mean")
-        if len(generate_weak_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
-            list_of_decisions.append("Attack Weak Connections")
+        else:
+            list_of_decisions.append("Play Adjacent To Enemy")
+
         if len(generate_OP_connections(Colour.opposite(information_set["Colour"]),information_set["Board"])) > 0:
             list_of_decisions.append("Nullify Enemy OP Connections")
 
@@ -347,8 +351,8 @@ def generate_weak_connections(colour, board):
 
     our_bridges = generate_current_bridges(colour,board)
     enemy_bridges = generate_current_bridges(Colour.opposite(colour),board)
-    before = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
-
+    our_before = calculate_moves_needed_to_win(board,colour,our_bridges,enemy_bridges)
+    enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
     move_set = []
 
     wall_list = setup_walls(colour)
@@ -371,18 +375,23 @@ def generate_weak_connections(colour, board):
                 board_copy.tiles[new_tile.x][new_tile.y].colour = Colour.opposite(colour)
                 our_bridges = generate_current_bridges(colour,board_copy)
                 enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_copy)
-                after = calculate_moves_needed_to_win(board_copy,colour,our_bridges,enemy_bridges)
+
+                our_after = calculate_moves_needed_to_win(board_copy,colour,our_bridges,enemy_bridges)
+                enemy_after = calculate_moves_needed_to_win(board_copy,Colour.opposite(colour),enemy_bridges,our_bridges)
                 # Take that tile
-                if after > before:
+                if our_after < our_before:
                     adjacents.append(new_tile)
-                
+                if enemy_after > enemy_before:
+                    adjacents.append(new_tile)
 
 
-
+    
+    adjacents = maximise_gain(colour,board,adjacents)
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
     current_bridges = set(generate_current_bridges(colour,board))
     current_bridges = [x for sublist in current_bridges for x in sublist]
-    return list((set(adjacents)).difference(current_bridges))
+    filtered_list = list((set(adjacents)).difference(current_bridges))
+    return filtered_list
 
 
 
@@ -429,6 +438,7 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
     execution_flow_dict = {
         "Play Best Fair Move":lambda:  get_fair_first_moves(),
         "Nullify Enemy OP Connections":lambda:  generate_OP_connections(Colour.opposite(colour),board),
+        "Prioritise OP Connections":lambda:  generate_OP_connections(colour,board),
         "Swap": lambda: swap(),
         "Central Move": lambda: central_move(board),
         "Potential Connections Plus Adjacent":lambda: potential_connections_or_adjacent(colour, board),
@@ -437,7 +447,8 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         "Help Ourselves" :lambda:  (colour, board),
         "Be Mean": lambda: generate_disrupting_moves(colour, board),
         "Fill Weak Connections":lambda: generate_weak_connections(colour, board),
-        "Attack Weak Connections": lambda: generate_weak_connections(Colour.opposite(colour),board)
+        "Attack Weak Connections": lambda: generate_weak_connections(Colour.opposite(colour),board),
+        "Play Adjacent To Enemy": lambda: generate_adjacent_tiles(Colour.opposite(colour),board)
     }
 
 
@@ -459,7 +470,8 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
 
     filtered_constraints,constraint_count = constraint_moveset(collection_of_movesets,colour,board)
     print(set_of_constraints[:constraint_count+1])
-
+    print("This is the moveset",collection_of_movesets)
+    print("This is the filtered constraints",filtered_constraints)
     return filtered_constraints
 
 
@@ -539,9 +551,7 @@ def generate_disrupting_moves(colour,board):
         enemy_change = enemy_current_needed - calculate_moves_needed_to_win(board_copy,Colour.opposite(colour),enemy_bridges,our_bridges)
         if (enemy_change < 0):
             # That move is productive for us (bad for enemy)
-            if enemy_change > high_score:
-                move_set = [move]
-                high_score = enemy_change
+            move_set = [move]
             move_set.append(move)
 
 
@@ -559,7 +569,6 @@ def maximise_gain(colour,board,move_set,):
     enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
     opponent_colour = Colour.opposite(colour)
     greedy_moveset = []
-    highscore = 0
     for move in move_set:
         board_with_move = clone_board(board)
         board_with_move.tiles[move.x][move.y].colour = colour
@@ -575,9 +584,8 @@ def maximise_gain(colour,board,move_set,):
         enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour),enemy_bridges,our_bridges)
 
         delta = (our_before-our_after)-(enemy_before-enemy_after)
-        if delta+1 > highscore:
-            highscore = max(highscore,delta)
-            greedy_moveset = [move]
+        if delta > 1 and (our_before-our_after) > 0:
+            greedy_moveset.append(move)
     return list(set(greedy_moveset))
 
 def potential_connections_or_adjacent(colour,board):
@@ -748,6 +756,7 @@ def generate_OP_connections(colour,board):
     enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
 
 
+    print(op_connections)
 
     # Check if moves complete a reach
     for move in op_connections:
@@ -763,12 +772,11 @@ def generate_OP_connections(colour,board):
         our_after = calculate_moves_needed_to_win(board_with_move,colour,our_bridges,enemy_bridges)
         enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour),enemy_bridges,our_bridges)
 
-        if our_after < our_before:
-            useful_op_connections.append(move)
 
         if enemy_after > enemy_before:
             useful_op_connections.append(move)
-
+        if our_before > our_after   :
+                    useful_op_connections.append(move)
     
     return list(set(useful_op_connections))
 
@@ -1350,6 +1358,9 @@ class RefactoredHexAgent(AgentBase):
         self.time_spent += time_spent_executing
         
         searching_time_start = time.perf_counter()
+
+        
+
         searching_time = allocate_thinking_time(self.time_spent, turn, 300)
         if len(move_set) == 1:
             # If we only have one option
