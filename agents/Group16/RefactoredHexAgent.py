@@ -116,7 +116,10 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
     queue: collections.deque[tuple[int, int]] = collections.deque()
     board_size = board.size
     costs_matrix = [[float("inf")] * board_size for _ in range(board_size)]
-
+    enemy_bridges = generate_current_bridges(Colour.opposite(player_to_move), board)
+    enemy_bridges = set([x for sublist in enemy_bridges for x in sublist])
+    our_bridges = generate_current_bridges(player_to_move, board)
+    our_bridges = set([x for sublist in our_bridges for x in sublist])
     if player_to_move == Colour.RED:
         for col in range(board_size):
             row = 0
@@ -138,33 +141,31 @@ def calculate_moves_needed_to_win(board: Board, player_to_move: Colour) -> float
             queue.append((row, col))
         SINKS = {(row, board_size - 1) for row in range(board_size)}
 
-    opponent_bridges = []
-    for bridges in generate_current_bridges(Colour.opposite(player_to_move), board):
-        opponent_bridges.extend(bridges)
-
-    opponent_bridges = set(opponent_bridges)
+    for row in range(board.size):
+        for col in range(board.size):
+            tile = board.tiles[row][col]
+            tile_move = Move(row, col)
+            if (
+                tile.colour == Colour.opposite(player_to_move)
+            ) or tile_move in enemy_bridges:
+                costs_matrix[row][col] = float("inf")
+            elif tile_move in our_bridges:
+                costs_matrix[row][col] = 0.5  # Tile is our bridges
 
     while queue:
         row, col = queue.popleft()
-
-        if Move(row, col) in opponent_bridges:
-            continue
-
         if (row, col) in SINKS:
             return costs_matrix[row][col]
-
         for dir_row, dir_col in DIRECTIONS:
             new_row, new_col = row + dir_row, col + dir_col
             if not in_bounds(board=board, row=new_row, col=new_col):
                 continue
             if board.tiles[new_row][new_col].colour == Colour.opposite(player_to_move):
                 continue
-
             cell_cost = (
                 0 if board.tiles[new_row][new_col].colour == player_to_move else 1
             )
             total_cost = costs_matrix[row][col] + cell_cost
-
             if total_cost < costs_matrix[new_row][new_col]:
                 costs_matrix[new_row][new_col] = total_cost
                 if cell_cost == 0:
