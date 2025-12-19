@@ -249,10 +249,7 @@ def identify_decision(information_set):
     }
     """
 
-    """
-    information_set[1] : (bridges_lost, undecided)
-        explanation - 
-    """
+
 
     our_bridges = generate_current_bridges(information_set["Colour"],information_set["Board"])
     enemy_bridges = generate_current_bridges(Colour.opposite(information_set["Colour"]),information_set["Board"])
@@ -341,9 +338,6 @@ def identify_decision(information_set):
 
     list_of_decisions = sorted(list_of_decisions, key=lambda c: priority_list.index(c))
     # just return the first thing we think of doing for now
-    print(list_of_decisions)
-    print(f"I think it takes that guy ({Colour.opposite(information_set['Colour'])}) ",calculate_moves_needed_to_win(information_set['Board'],Colour.opposite(information_set['Colour']),enemy_bridges,our_bridges), " tiles to win")
-    print(f"I think it takes me ({(information_set['Colour'])}) ",calculate_moves_needed_to_win(information_set['Board'],(information_set['Colour']),our_bridges,enemy_bridges)," tiles to win")
     return list_of_decisions
 
 def generate_weak_connections(colour, board):
@@ -386,7 +380,7 @@ def generate_weak_connections(colour, board):
 
 
     
-    adjacents = maximise_gain(colour,board,adjacents)
+    #adjacents = maximise_gain(colour,board,adjacents)
     adjacents = list(filter(lambda f: adjacents.count(f) > 1,adjacents))
     current_bridges = set(generate_current_bridges(colour,board))
     current_bridges = [x for sublist in current_bridges for x in sublist]
@@ -420,7 +414,6 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
     )
     # Returns a List(tuple) containing the difference of old bridges compared to new bridges
 
-    # print(bridges_lost)
 
     # This is the function that takes all the information we have
     # And all the factors we need to consider
@@ -464,14 +457,10 @@ def execution_flow(old_current_bridges, turn, colour, board, opp_move):
         move_set = execution_flow_dict[constraint]()
         collection_of_movesets.append(set(move_set))
 
-    """
-    Regardles
-    """
+
 
     filtered_constraints,constraint_count = constraint_moveset(collection_of_movesets,colour,board)
-    print(set_of_constraints[:constraint_count+1])
-    print("This is the moveset",collection_of_movesets)
-    print("This is the filtered constraints",filtered_constraints)
+
     return filtered_constraints
 
 
@@ -497,7 +486,6 @@ def generate_potential_reach(colour, board):
 
 def help_ourselves(colour,board):
     """
-    this is not done whatsoever
     Find all moves that decrease our shortest path to win
     """
 
@@ -558,7 +546,6 @@ def generate_disrupting_moves(colour,board):
 
     return move_set
 
-# just testin out this func
 def maximise_gain(colour,board,move_set,):
         # Check if moves complete a reach
 
@@ -574,11 +561,7 @@ def maximise_gain(colour,board,move_set,):
         board_with_move.tiles[move.x][move.y].colour = colour
         our_bridges = generate_current_bridges(colour,board_with_move)
         enemy_bridges = generate_current_bridges(Colour.opposite(colour),board_with_move)
-        # If it is the case that the endgame remains the same (FALSE & FALSE or TRUE & TRUE), not a useful move
-        # If it goes from FALSE to TRUE, then the move helped reach endgame, hence useful
-        # TRUE to FALSE can't happen
-        # if reach_before_move != reach_after_move:
-        #     useful_op_connections.append(move)
+
         our_after = calculate_moves_needed_to_win(board_with_move,colour,our_bridges,enemy_bridges)
 
         enemy_after = calculate_moves_needed_to_win(board_with_move,Colour.opposite(colour),enemy_bridges,our_bridges)
@@ -756,7 +739,6 @@ def generate_OP_connections(colour,board):
     enemy_before = calculate_moves_needed_to_win(board,Colour.opposite(colour),enemy_bridges,our_bridges)
 
 
-    print(op_connections)
 
     # Check if moves complete a reach
     for move in op_connections:
@@ -775,8 +757,7 @@ def generate_OP_connections(colour,board):
 
         if enemy_after > enemy_before:
             useful_op_connections.append(move)
-        if our_before > our_after   :
-                    useful_op_connections.append(move)
+
     
     return list(set(useful_op_connections))
 
@@ -835,7 +816,7 @@ def generate_current_bridges(colour, board, chosen_move=None):
     # For each tile
     for tile in our_tiles:
         current_bridges += cardinal_dirs(tile, wall_list, colour, board)
-    # print(wall_list)
+
     return list(set(current_bridges))
 
 
@@ -845,8 +826,7 @@ def compare_previous_board_state(old_current_bridges, new_current_bridges):
     Should return a list of the pairs that are different
     i.e. has the enemy taken a bridge from us
     """
-    # print("Old",old_current_bridges)
-    # print("New",new_current_bridges)
+
 
     return list(set(old_current_bridges).difference(set(new_current_bridges)))
 
@@ -922,7 +902,7 @@ def allocate_thinking_time(
 ):
     # Spend more time thinking if we are behind on moves to win
     our_min_win = calculate_moves_needed_to_win(board, colour, our_bridges, enemy_bridges)
-    enemy_min_win = calculate_moves_needed_to_win(board, Colour.opposite(colour), our_bridges, enemy_bridges)
+    enemy_min_win = calculate_moves_needed_to_win(board, Colour.opposite(colour),enemy_bridges, our_bridges)
     # Increase conservativeness when behind
     if enemy_min_win < our_min_win:
         C = C * C_multiplier
@@ -1140,7 +1120,6 @@ def mcts_search(
             board_copy.tiles[move.x][move.y].colour = my_colour
             if board_copy.has_ended(my_colour) or check_reach(my_colour,board_copy,generate_current_bridges(my_colour,board_copy)):
                 return move
-        # maybe one of these just
 
     start_time = time.perf_counter()
     it = 0
@@ -1189,7 +1168,6 @@ def mcts_search(
                     weights=[weight for _, weight in node.pruned_moves],
                 )[0]
 
-                # move = random.choice(node.pruned_moves)
                 simulation_node = node.add_child(move)
             # 3) SIMULATION: random playout from this node
 
@@ -1213,15 +1191,11 @@ def mcts_search(
     if not root.children:
         # No children (e.g. board full / very tiny time budget) – just play random legal move
 
-        """
-        I'm just trying to improve the way the function acts when it's desperate
-        Slightly prune the moves we play to be just non bridges IF we can, else game is lost and play any legal move
-        """
-
         legal_moves = get_legal_moves(root_board) # prune
         return random.choice(legal_moves)
     children = list(root.children)
     # Optionally prepare and print top-k rankings
+    report_top_k = None
     if report_top_k is not None and report_top_k > 0 and root.children:
         # compute stats for each child
         def child_stats(child: MCTSNode):
@@ -1363,11 +1337,6 @@ class RefactoredHexAgent(AgentBase):
         time_spent_executing = executing_time_end-executing_time_start
         self.execution_flow_thinking_time += time_spent_executing
 
-        print("-------")
-        print("Time spent executing",time_spent_executing)
-        print("Time spent executing this game",self.execution_flow_thinking_time)
-        print("-------")
-
         self.time_spent += time_spent_executing
         
         our_bridges = generate_current_bridges(self.colour, board)
@@ -1378,13 +1347,11 @@ class RefactoredHexAgent(AgentBase):
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
-            print("These were my only options",move_set)
             searching_time = 0 # Case where we didnt even have to think
             # Don't bother checking others (case where hand is forced)
         else:
             # Otherwise, try to figure out which move is our best move
 
-            print(f"Allocated thinking time for this turn: {searching_time}")
 
             chosen_move = mcts_search(
                 root_board=board,
@@ -1398,52 +1365,13 @@ class RefactoredHexAgent(AgentBase):
         searching_time_end = time.perf_counter()
         time_spent_searching = searching_time_end - searching_time_start
         self.MCTS_thinking_time += time_spent_searching
-        print("It took ",time_spent_searching, "to run MCTS for this move")
-        print("I was allowed a total of ",self.MCTS_thinking_time,"for MCTS searching this game (via time management)")
+
         self.time_spent += time_spent_searching
 
-        print(f"Total Time: {self.time_spent}")
+
 
         self.current_bridges = generate_current_bridges(self.colour,board,chosen_move)
         # Instead of checking time per move and comparing it each turn
         # We check the time spent from the beginning of the game to the very instant that we try to allocate time to the searching algo
         # Via an attribute
         return chosen_move
-
-
-# RUN CMDS
-
-# Agent VS Naive:
-# Red
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent"
-# Blue
-# python3 Hex.py -p1 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p1Name "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "Group16"
-
-# Agent VS Agent
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "G16Player1" -p2 "TestAgent" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "G16Player2"
-
-# To run the analysis over 100 games (this took 2-3 hours for me):
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.TestAgents.RandomValidAgent RandomValidAgent" -p2Name "TestAgent" -a -g 50
-
-# Playing main vs new agent
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.PreRAA PreRAA" -p2Name "PreRAA" -a -g 50
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Latest" -p2 "agents.Group16.cat Cat" -p2Name "cat" -a -g 50
-
-# To play the agent against a human:
-# python3 Hex.py -p1 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p1Name "Group16" -p2 "agents.Human.HumanPlayer HumanPlayer" -p2Name "Human"
-# python3 Hex.py -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "Group16" -p1 "agents.Human.HumanPlayer HumanPlayer" -p1Name "Human"
-
-
-#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"  
-#python3 Hex.py -p1 "agents.Group16.HexAgent HexAgent" -p1Name "(Old) MCTS Only" -p2 "agents.Group16.RefactoredHexAgent RefactoredHexAgent" -p2Name "(New) Rewritten HexAgent"
-
-"""
-
-
-Final list of things left to add/change:
-
-3. Make a final decision on how mean it should be backed up with some testing.
-
-
-7. Play the latest version against itself or any other version and study the games where it loses to understand why. -> Fix those issues if possible.
-"""
