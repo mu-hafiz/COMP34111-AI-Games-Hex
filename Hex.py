@@ -152,7 +152,7 @@ if __name__ == "__main__":
             except:
                 errorPlayer = g.players[Colour.opposite(g.current_player)].name
                 turns = g.turn
-                errors[winner] += 1
+                errors[errorPlayer] += 1
                 turnsPerGame.append(turns)
                 turnsPerError[winner].append(turns)
             else:

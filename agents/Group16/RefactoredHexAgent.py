@@ -905,14 +905,16 @@ def allocate_thinking_time(
     move_number,
     board: Board,
     colour: Colour,
+    our_bridges,
+    enemy_bridges,
     max_time=295,
     max_moves=70,
     C=20,
     C_multiplier=0.4
 ):
     # Spend more time thinking if we are behind on moves to win
-    our_min_win = calculate_moves_needed_to_win(board, colour)
-    enemy_min_win = calculate_moves_needed_to_win(board, colour.opposite)
+    our_min_win = calculate_moves_needed_to_win(board, colour, our_bridges, enemy_bridges)
+    enemy_min_win = calculate_moves_needed_to_win(board, Colour.opposite(colour), our_bridges, enemy_bridges)
     # Increase conservativeness when behind
     if enemy_min_win < our_min_win:
         C = C * C_multiplier
@@ -1360,8 +1362,11 @@ class RefactoredHexAgent(AgentBase):
 
         self.time_spent += time_spent_executing
         
+        our_bridges = generate_current_bridges(self.colour, board)
+        enemy_bridges = generate_current_bridges(Colour.opposite(self.colour), board)    
+
         searching_time_start = time.perf_counter()
-        searching_time = allocate_thinking_time(self.time_spent, turn, board, self.colour)
+        searching_time = allocate_thinking_time(self.time_spent, turn, board, self.colour, our_bridges, enemy_bridges)
         if len(move_set) == 1:
             # If we only have one option
             chosen_move = move_set[0]
